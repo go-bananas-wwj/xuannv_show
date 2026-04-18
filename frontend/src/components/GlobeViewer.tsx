@@ -1,5 +1,5 @@
 import { useRef, useMemo, useCallback } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useLoader } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, Stars } from '@react-three/drei'
 import * as THREE from 'three'
@@ -36,22 +36,82 @@ function getInitialCameraPosition(): [number, number, number] {
   return [pos.x, pos.y, pos.z]
 }
 
+// 真实地球纹理 — 参考 terrabit 风格
 function Earth() {
+  const [colorMap, normalMap, specularMap] = useLoader(
+    THREE.TextureLoader,
+    [
+      '/textures/earth_atmos_2048.jpg',
+      '/textures/earth_normal_2048.jpg',
+      '/textures/earth_specular_2048.jpg',
+    ]
+  )
+
+  // 修正纹理方向
+  colorMap.colorSpace = THREE.SRGBColorSpace
+
   return (
     <group>
+      {/* 地球本体 */}
       <mesh>
-        <sphereGeometry args={[EARTH_RADIUS, 48, 48]} />
-        <meshBasicMaterial color="#0c1d33" />
+        <sphereGeometry args={[EARTH_RADIUS, 64, 64]} />
+        <meshStandardMaterial
+          map={colorMap}
+          normalMap={normalMap}
+          roughnessMap={specularMap}
+          roughness={0.65}
+          metalness={0.05}
+          emissive="#001133"
+          emissiveIntensity={0.2}
+        />
       </mesh>
+
+      {/* 大气层光晕 — 参考 terrabit 边缘散射效果 */}
       <mesh>
-        <sphereGeometry args={[EARTH_RADIUS + 0.005, 24, 24]} />
-        <meshBasicMaterial color="#1a3a5c" wireframe transparent opacity={0.25} />
+        <sphereGeometry args={[EARTH_RADIUS * 1.04, 64, 64]} />
+        <meshBasicMaterial
+          color="#5ba4ff"
+          transparent
+          opacity={0.08}
+          side={THREE.BackSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
       </mesh>
+
+      {/* 外层淡光晕 */}
       <mesh>
-        <sphereGeometry args={[EARTH_RADIUS * 1.08, 32, 32]} />
-        <meshBasicMaterial color="#22d3ee" transparent opacity={0.04} side={THREE.BackSide} />
+        <sphereGeometry args={[EARTH_RADIUS * 1.15, 32, 32]} />
+        <meshBasicMaterial
+          color="#3d8bff"
+          transparent
+          opacity={0.03}
+          side={THREE.BackSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
       </mesh>
     </group>
+  )
+}
+
+function Lights() {
+  return (
+    <>
+      <ambientLight intensity={0.6} />
+      <directionalLight
+        position={[5, 3, 5]}
+        intensity={1.5}
+        color="#fff8e7"
+      />
+      <directionalLight
+        position={[-3, -2, -3]}
+        intensity={0.2}
+        color="#5ba4ff"
+      />
+      {/* 边缘补光，让地球背面不完全黑 */}
+      <pointLight position={[0, 0, -5]} intensity={0.3} color="#6bb5ff" />
+    </>
   )
 }
 
@@ -83,57 +143,9 @@ function RegionBoundary({ patches }: { patches: PatchOverlay[] }) {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
-      <lineBasicMaterial color="#f97316" transparent opacity={0.6} />
+      <lineBasicMaterial color="#ff6b35" transparent opacity={0.8} />
     </line>
   )
-}
-
-function RegionGlow({ patches }: { patches: PatchOverlay[] }) {
-  const pos = useMemo(() => {
-    let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180
-    for (const p of patches) {
-      const [wMinLon, wMinLat, wMaxLon, wMaxLat] = p.bounds_wgs84
-      minLat = Math.min(minLat, wMinLat)
-      maxLat = Math.max(maxLat, wMaxLat)
-      minLon = Math.min(minLon, wMinLon)
-      maxLon = Math.max(maxLon, wMaxLon)
-    }
-    const centerLat = (minLat + maxLat) / 2
-    const centerLon = (minLon + maxLon) / 2
-    return latLonToVector3(centerLat, centerLon, EARTH_RADIUS + 0.025)
-  }, [patches])
-
-  const tex = useMemo(() => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 128
-    canvas.height = 128
-    const ctx = canvas.getContext('2d')!
-    const gradient = ctx.createRadialGradient(64, 64, 8, 64, 64, 60)
-    gradient.addColorStop(0, 'rgba(34, 211, 238, 0.5)')
-    gradient.addColorStop(0.5, 'rgba(34, 211, 238, 0.12)')
-    gradient.addColorStop(1, 'transparent')
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, 128, 128)
-    const texture = new THREE.CanvasTexture(canvas)
-    texture.needsUpdate = true
-    return texture
-  }, [])
-
-  return (
-    <sprite position={pos} scale={[0.55, 0.55, 1]}>
-      <spriteMaterial map={tex} transparent opacity={0.5} depthTest={false} />
-    </sprite>
-  )
-}
-
-function spreadLatLon(
-  lat: number,
-  lon: number,
-  centerLat: number,
-  centerLon: number,
-  factor: number
-): [number, number] {
-  return [centerLat + (lat - centerLat) * factor, centerLon + (lon - centerLon) * factor]
 }
 
 function createDotTexture(): THREE.Texture {
@@ -152,6 +164,16 @@ function createDotTexture(): THREE.Texture {
   return tex
 }
 
+function spreadLatLon(
+  lat: number,
+  lon: number,
+  centerLat: number,
+  centerLon: number,
+  factor: number
+): [number, number] {
+  return [centerLat + (lat - centerLat) * factor, centerLon + (lon - centerLon) * factor]
+}
+
 function PatchPoints({
   patches,
   selectedPatchId,
@@ -159,6 +181,7 @@ function PatchPoints({
   dataSource,
 }: GlobeViewerProps) {
   const dotTex = useMemo(() => createDotTexture(), [])
+
   const displayPatches = useMemo(() => {
     if (patches.length <= 200) return patches
     const step = Math.ceil(patches.length / 200)
@@ -192,7 +215,7 @@ function PatchPoints({
 
       const isSelected = selectedPatchId === patch.patch_id
       const c = new THREE.Color(
-        isSelected ? '#ffffff' : dataSource === 'embedding' ? '#f97316' : '#22d3ee'
+        isSelected ? '#ffffff' : dataSource === 'embedding' ? '#ff6b35' : '#00d4ff'
       )
       colArr[i * 3] = c.r
       colArr[i * 3 + 1] = c.g
@@ -260,15 +283,15 @@ function RegionMarker() {
     <group position={pos}>
       <mesh ref={ref2}>
         <ringGeometry args={[0.1, 0.11, 32]} />
-        <meshBasicMaterial color="#f97316" transparent opacity={0.9} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#ff6b35" transparent opacity={0.9} side={THREE.DoubleSide} />
       </mesh>
       <mesh>
         <circleGeometry args={[0.03, 16]} />
-        <meshBasicMaterial color="#f97316" />
+        <meshBasicMaterial color="#ff6b35" />
       </mesh>
       <mesh ref={ref1}>
         <ringGeometry args={[0.11, 0.13, 32]} />
-        <meshBasicMaterial color="#f97316" transparent opacity={0.4} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#ff6b35" transparent opacity={0.4} side={THREE.DoubleSide} />
       </mesh>
     </group>
   )
@@ -290,9 +313,9 @@ export default function GlobeViewer({
         gl={{ antialias: true, alpha: true }}
       >
         <Stars radius={80} depth={50} count={1500} factor={4} saturation={0} fade speed={1} />
+        <Lights />
         <Earth />
         <RegionBoundary patches={patches} />
-        <RegionGlow patches={patches} />
         <PatchPoints
           patches={patches}
           selectedPatchId={selectedPatchId}
