@@ -1,5 +1,6 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useCallback } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
+import type { ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, Stars } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -19,6 +20,7 @@ interface GlobeViewerProps {
 const HARBIN_LAT = 45.8
 const HARBIN_LON = 126.55
 const EARTH_RADIUS = 2
+const SPREAD_FACTOR = 15
 
 function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
@@ -63,7 +65,6 @@ function RegionBoundary({ patches }: { patches: PatchOverlay[] }) {
       minLon = Math.min(minLon, wMinLon)
       maxLon = Math.max(maxLon, wMaxLon)
     }
-
     const corners = [
       latLonToVector3(maxLat, minLon, EARTH_RADIUS + 0.03),
       latLonToVector3(maxLat, maxLon, EARTH_RADIUS + 0.03),
@@ -75,121 +76,15 @@ function RegionBoundary({ patches }: { patches: PatchOverlay[] }) {
   }, [patches])
 
   const positions = useMemo(() => new Float32Array(points.flatMap((p) => [p.x, p.y, p.z])), [points])
-
   if (points.length < 3) return null
 
   return (
     <line>
       <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          args={[positions, 3]}
-        />
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
       <lineBasicMaterial color="#f97316" transparent opacity={0.6} />
     </line>
-  )
-}
-
-// 创建圆形纹理，用于 sprite
-function createCircleTexture(color: string, opacity: number): THREE.Texture {
-  const canvas = document.createElement('canvas')
-  canvas.width = 64
-  canvas.height = 64
-  const ctx = canvas.getContext('2d')!
-  
-  // 外圈光晕
-  const gradient = ctx.createRadialGradient(32, 32, 4, 32, 32, 30)
-  gradient.addColorStop(0, color)
-  gradient.addColorStop(1, 'transparent')
-  ctx.fillStyle = gradient
-  ctx.globalAlpha = opacity * 0.5
-  ctx.fillRect(0, 0, 64, 64)
-  
-  // 中心实心圆
-  ctx.beginPath()
-  ctx.arc(32, 32, 8, 0, Math.PI * 2)
-  ctx.fillStyle = color
-  ctx.globalAlpha = opacity
-  ctx.fill()
-  
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.needsUpdate = true
-  return texture
-}
-
-function PatchSprites({
-  patches,
-  selectedPatchId,
-  onSelectPatch,
-  dataSource,
-}: GlobeViewerProps) {
-  const groupRef = useRef<THREE.Group>(null)
-  
-  const displayPatches = useMemo(() => {
-    if (patches.length <= 150) return patches
-    const step = Math.ceil(patches.length / 150)
-    return patches.filter((_, i) => i % step === 0)
-  }, [patches])
-
-  const textures = useMemo(() => {
-    const monthlyTex = createCircleTexture('#22d3ee', 0.9)
-    const embedTex = createCircleTexture('#f97316', 0.9)
-    const selectedTex = createCircleTexture('#ffffff', 1.0)
-    return { monthly: monthlyTex, embedding: embedTex, selected: selectedTex }
-  }, [])
-
-  // 使用 useFrame 让 sprite 始终朝向相机
-  useFrame(({ camera }) => {
-    if (groupRef.current) {
-      groupRef.current.children.forEach((child) => {
-        child.lookAt(camera.position)
-      })
-    }
-  })
-
-  return (
-    <group ref={groupRef}>
-      {displayPatches.map((patch) => {
-        const [minLon, minLat, maxLon, maxLat] = patch.bounds_wgs84
-        const centerLat = (minLat + maxLat) / 2
-        const centerLon = (minLon + maxLon) / 2
-        const pos = latLonToVector3(centerLat, centerLon, EARTH_RADIUS + 0.02)
-
-        const isSelected = selectedPatchId === patch.patch_id
-        const hasData = Object.keys(patch.sources).length > 0
-        const tex = isSelected ? textures.selected : dataSource === 'embedding' ? textures.embedding : textures.monthly
-        const size = isSelected ? 0.18 : 0.12
-        const opacity = isSelected ? 1.0 : hasData ? 0.85 : 0.4
-
-        return (
-          <sprite
-            key={patch.patch_id}
-            position={pos}
-            scale={[size, size, 1]}
-            onClick={(e) => {
-              e.stopPropagation()
-              onSelectPatch(isSelected ? null : patch)
-            }}
-            onPointerOver={(e) => {
-              e.stopPropagation()
-              document.body.style.cursor = 'pointer'
-            }}
-            onPointerOut={() => {
-              document.body.style.cursor = 'default'
-            }}
-          >
-            <spriteMaterial
-              map={tex}
-              transparent
-              opacity={opacity}
-              depthTest={false}
-              depthWrite={false}
-            />
-          </sprite>
-        )
-      })}
-    </group>
   )
 }
 
@@ -214,8 +109,8 @@ function RegionGlow({ patches }: { patches: PatchOverlay[] }) {
     canvas.height = 128
     const ctx = canvas.getContext('2d')!
     const gradient = ctx.createRadialGradient(64, 64, 8, 64, 64, 60)
-    gradient.addColorStop(0, 'rgba(34, 211, 238, 0.6)')
-    gradient.addColorStop(0.5, 'rgba(34, 211, 238, 0.15)')
+    gradient.addColorStop(0, 'rgba(34, 211, 238, 0.5)')
+    gradient.addColorStop(0.5, 'rgba(34, 211, 238, 0.12)')
     gradient.addColorStop(1, 'transparent')
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, 128, 128)
@@ -225,9 +120,123 @@ function RegionGlow({ patches }: { patches: PatchOverlay[] }) {
   }, [])
 
   return (
-    <sprite position={pos} scale={[0.5, 0.5, 1]}>
-      <spriteMaterial map={tex} transparent opacity={0.6} depthTest={false} />
+    <sprite position={pos} scale={[0.55, 0.55, 1]}>
+      <spriteMaterial map={tex} transparent opacity={0.5} depthTest={false} />
     </sprite>
+  )
+}
+
+function createDotTexture(): THREE.Texture {
+  const canvas = document.createElement('canvas')
+  canvas.width = 64
+  canvas.height = 64
+  const ctx = canvas.getContext('2d')!
+  const grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 30)
+  grad.addColorStop(0, 'rgba(255,255,255,1)')
+  grad.addColorStop(0.4, 'rgba(255,255,255,0.7)')
+  grad.addColorStop(1, 'transparent')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, 64, 64)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.needsUpdate = true
+  return tex
+}
+
+function spreadLatLon(
+  lat: number,
+  lon: number,
+  centerLat: number,
+  centerLon: number,
+  factor: number
+): [number, number] {
+  return [centerLat + (lat - centerLat) * factor, centerLon + (lon - centerLon) * factor]
+}
+
+function PatchPoints({
+  patches,
+  selectedPatchId,
+  onSelectPatch,
+  dataSource,
+}: GlobeViewerProps) {
+  const dotTex = useMemo(() => createDotTexture(), [])
+
+  const displayPatches = useMemo(() => {
+    if (patches.length <= 200) return patches
+    const step = Math.ceil(patches.length / 200)
+    return patches.filter((_, i) => i % step === 0)
+  }, [patches])
+
+  const { positionArray, colorArray } = useMemo(() => {
+    let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180
+    for (const p of patches) {
+      const [wMinLon, wMinLat, wMaxLon, wMaxLat] = p.bounds_wgs84
+      minLat = Math.min(minLat, wMinLat)
+      maxLat = Math.max(maxLat, wMaxLat)
+      minLon = Math.min(minLon, wMinLon)
+      maxLon = Math.max(maxLon, wMaxLon)
+    }
+    const cLat = (minLat + maxLat) / 2
+    const cLon = (minLon + maxLon) / 2
+
+    const posArr = new Float32Array(displayPatches.length * 3)
+    const colArr = new Float32Array(displayPatches.length * 3)
+
+    displayPatches.forEach((patch, i) => {
+      const [minLon, minLat, maxLon, maxLat] = patch.bounds_wgs84
+      const centerPatchLat = (minLat + maxLat) / 2
+      const centerPatchLon = (minLon + maxLon) / 2
+      const [spreadLat, spreadLon] = spreadLatLon(centerPatchLat, centerPatchLon, cLat, cLon, SPREAD_FACTOR)
+      const pos = latLonToVector3(spreadLat, spreadLon, EARTH_RADIUS + 0.03)
+      posArr[i * 3] = pos.x
+      posArr[i * 3 + 1] = pos.y
+      posArr[i * 3 + 2] = pos.z
+
+      const isSelected = selectedPatchId === patch.patch_id
+      const c = new THREE.Color(
+        isSelected ? '#ffffff' : dataSource === 'embedding' ? '#f97316' : '#22d3ee'
+      )
+      colArr[i * 3] = c.r
+      colArr[i * 3 + 1] = c.g
+      colArr[i * 3 + 2] = c.b
+    })
+
+    return { positionArray: posArr, colorArray: colArr }
+  }, [displayPatches, patches, dataSource, selectedPatchId])
+
+  const handleClick = useCallback((e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation()
+    const intersection = e.intersections?.[0]
+    if (intersection && typeof intersection.index === 'number') {
+      const idx = intersection.index
+      if (idx >= 0 && idx < displayPatches.length) {
+        const patch = displayPatches[idx]
+        const isSelected = selectedPatchId === patch.patch_id
+        onSelectPatch(isSelected ? null : patch)
+      }
+    }
+  }, [displayPatches, onSelectPatch, selectedPatchId])
+
+  return (
+    <points
+      onClick={handleClick}
+      onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer' }}
+      onPointerOut={() => { document.body.style.cursor = 'default' }}
+    >
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positionArray, 3]} />
+        <bufferAttribute attach="attributes-color" args={[colorArray, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        size={0.25}
+        vertexColors
+        map={dotTex}
+        transparent
+        opacity={0.95}
+        sizeAttenuation
+        depthTest={false}
+        alphaTest={0.01}
+      />
+    </points>
   )
 }
 
@@ -285,7 +294,7 @@ export default function GlobeViewer({
         <Earth />
         <RegionBoundary patches={patches} />
         <RegionGlow patches={patches} />
-        <PatchSprites
+        <PatchPoints
           patches={patches}
           selectedPatchId={selectedPatchId}
           onSelectPatch={onSelectPatch}

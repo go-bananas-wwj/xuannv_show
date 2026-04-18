@@ -29,6 +29,10 @@ const SOURCE_NAMES: Record<string, string> = {
 }
 
 export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelProps) {
+  const embeddingUrl = patch
+    ? `/data/embeddings/v2/${patch.patch_id}.png`
+    : null
+
   return (
     <AnimatePresence>
       {patch && (
@@ -50,12 +54,32 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
               </button>
             </div>
 
-            {/* Thumbnail placeholder */}
-            <div className="aspect-video rounded-lg bg-space-900/80 border border-white/5 flex items-center justify-center mb-6">
-              <div className="text-center">
-                <ImageIcon className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-                <p className="text-sm text-slate-500">栅格缩略图</p>
-              </div>
+            {/* Embedding preview image */}
+            <div className="aspect-video rounded-lg bg-space-900/80 border border-white/5 flex items-center justify-center mb-6 overflow-hidden">
+              {embeddingUrl ? (
+                <img
+                  src={embeddingUrl}
+                  alt={`${patch.patch_id} embedding preview`}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                    const parent = (e.target as HTMLImageElement).parentElement
+                    if (parent) {
+                      parent.innerHTML = `
+                        <div class="text-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-slate-600 mx-auto mb-2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                          <p class="text-sm text-slate-500">暂无预览图</p>
+                        </div>
+                      `
+                    }
+                  }}
+                />
+              ) : (
+                <div className="text-center">
+                  <ImageIcon className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm text-slate-500">栅格缩略图</p>
+                </div>
+              )}
             </div>
 
             {/* Info grid */}
