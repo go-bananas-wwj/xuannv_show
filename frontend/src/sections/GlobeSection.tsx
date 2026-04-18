@@ -5,7 +5,6 @@ import GlobeViewer from '@/components/GlobeViewer'
 import PatchDetailPanel from '@/components/PatchDetailPanel'
 import DataSourceSwitcher from '@/components/DataSourceSwitcher'
 import GlassPanel from '@/components/GlassPanel'
-import { fetchPatches } from '@/utils/api'
 
 interface PatchOverlay {
   patch_id: string
@@ -20,11 +19,13 @@ export default function GlobeSection() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchPatches()
+    // 从静态 JSON 加载（离线数据，不依赖后端）
+    fetch('/data/patches_meta.json')
+      .then((res) => res.json())
       .then((data) => {
         const valid = data
-          .filter((p) => p.bounds_wgs84 && p.bounds_wgs84.length === 4)
-          .map((p) => ({
+          .filter((p: any) => p.bounds_wgs84 && p.bounds_wgs84.length === 4)
+          .map((p: any) => ({
             patch_id: p.patch_id,
             bounds_wgs84: p.bounds_wgs84 as [number, number, number, number],
             sources: p.sources,
