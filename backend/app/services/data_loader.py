@@ -68,8 +68,10 @@ class DataLoader:
         """返回预定义的可用 heads 列表."""
         return [
             {"id": "change_detection", "name": "变化检测", "description": "像素级二元变化检测"},
-            {"id": "multiclass_cd", "name": "多类别变化检测", "description": "construction / demolition / land_conversion"},
-            {"id": "fewshot", "name": "少样本分类", "description": "基于原型网络的分类"},
+            {"id": "worldcover", "name": "WorldCover分类", "description": "ESA WorldCover 11类土地覆盖分类"},
+            {"id": "dynamic_world", "name": "Dynamic World分类", "description": "Google Dynamic World 9类土地利用分类"},
+            {"id": "jrc_water", "name": "JRC水体提取", "description": "JRC Global Surface Water 水体提取"},
+            {"id": "building_extraction", "name": "建筑物提取", "description": "基于WorldCover Built-up的建筑物提取"},
         ]
 
 

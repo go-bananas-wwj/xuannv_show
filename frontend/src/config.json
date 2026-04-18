@@ -15,23 +15,39 @@
       "nameEn": "Change Detection",
       "icon": "flame",
       "description": "像素级二元变化检测，输出变化概率热力图",
-      "color": "#f97316"
+      "color": "#f59e0b"
     },
     {
-      "id": "multiclass_cd",
-      "name": "多类别变化检测",
-      "nameEn": "Multi-Class Change Detection",
-      "icon": "layers",
-      "description": "construction / demolition / land_conversion 三分类变化",
+      "id": "worldcover",
+      "name": "WorldCover分类",
+      "nameEn": "WorldCover Land Cover",
+      "icon": "globe",
+      "description": "ESA WorldCover 11类土地覆盖分类",
+      "color": "#22c55e"
+    },
+    {
+      "id": "dynamic_world",
+      "name": "Dynamic World分类",
+      "nameEn": "Dynamic World Land Use",
+      "icon": "trees",
+      "description": "Google Dynamic World 9类土地利用分类",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "jrc_water",
+      "name": "JRC水体提取",
+      "nameEn": "JRC Water Extraction",
+      "icon": "waves",
+      "description": "JRC Global Surface Water 水体提取",
       "color": "#06b6d4"
     },
     {
-      "id": "fewshot",
-      "name": "少样本分类",
-      "nameEn": "Few-Shot Classification",
-      "icon": "brain",
-      "description": "基于原型网络的少样本遥感图像分类",
-      "color": "#8b5cf6"
+      "id": "building_extraction",
+      "name": "建筑物提取",
+      "nameEn": "Building Extraction",
+      "icon": "building2",
+      "description": "基于WorldCover Built-up的建筑物提取",
+      "color": "#ef4444"
     }
   ],
   "time_range": ["2023-01", "2025-10"],

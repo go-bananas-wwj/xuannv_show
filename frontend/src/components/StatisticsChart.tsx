@@ -20,7 +20,7 @@ interface StatisticsChartProps {
   }
 }
 
-const COLORS = ['#f97316', '#22d3ee', '#8b5cf6', '#10b981', '#ef4444']
+const COLORS = ['#f59e0b', '#0ea5e9', '#8b5cf6', '#10b981', '#ef4444']
 
 export default function StatisticsChart({ statistics }: StatisticsChartProps) {
   const categories = statistics.categories || {}
@@ -57,13 +57,13 @@ export default function StatisticsChart({ statistics }: StatisticsChartProps) {
         ].map((stat) => (
           <div
             key={stat.label}
-            className="text-center p-4 rounded-lg bg-white/5"
+            className="text-center p-4 rounded-lg bg-slate-50"
           >
-            <div className="text-2xl font-bold text-cyan-400">
+            <div className="text-2xl font-bold text-sky-500">
               {stat.value}
-              <span className="text-sm text-slate-500 ml-1">{stat.unit}</span>
+              <span className="text-sm text-slate-400 ml-1">{stat.unit}</span>
             </div>
-            <div className="text-xs text-slate-500 mt-1">{stat.label}</div>
+            <div className="text-xs text-slate-400 mt-1">{stat.label}</div>
           </div>
         ))}
       </div>
@@ -72,7 +72,7 @@ export default function StatisticsChart({ statistics }: StatisticsChartProps) {
       {pieData.length > 0 && (
         <div className="grid md:grid-cols-2 gap-6">
           <div className="h-48">
-            <p className="text-xs text-slate-500 mb-2">类别分布</p>
+            <p className="text-xs text-slate-400 mb-2">类别分布</p>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -93,10 +93,10 @@ export default function StatisticsChart({ statistics }: StatisticsChartProps) {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    background: '#111827',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
                     borderRadius: '8px',
-                    color: '#e2e8f0',
+                    color: '#1e293b',
                   }}
                 />
               </PieChart>
@@ -104,21 +104,21 @@ export default function StatisticsChart({ statistics }: StatisticsChartProps) {
           </div>
 
           <div className="h-48">
-            <p className="text-xs text-slate-500 mb-2">变化统计</p>
+            <p className="text-xs text-slate-400 mb-2">变化统计</p>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={summaryData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 12 }} />
                 <YAxis tick={{ fill: '#64748b', fontSize: 12 }} />
                 <Tooltip
                   contentStyle={{
-                    background: '#111827',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
                     borderRadius: '8px',
-                    color: '#e2e8f0',
+                    color: '#1e293b',
                   }}
                 />
-                <Bar dataKey="value" fill="#22d3ee" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="value" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

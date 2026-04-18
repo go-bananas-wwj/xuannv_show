@@ -43,19 +43,19 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className="fixed top-0 right-0 h-full w-full max-w-md z-50"
         >
-          <GlassPanel className="h-full overflow-y-auto p-6 border-l border-white/10">
+          <GlassPanel className="h-full overflow-y-auto p-6 border-l border-slate-200">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-slate-100">{patch.patch_id}</h2>
+              <h2 className="text-xl font-bold text-slate-800">{patch.patch_id}</h2>
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
               >
                 <X className="w-5 h-5 text-slate-400" />
               </button>
             </div>
 
             {/* Embedding preview image */}
-            <div className="aspect-video rounded-lg bg-space-900/80 border border-white/5 flex items-center justify-center mb-6 overflow-hidden">
+            <div className="aspect-video rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center mb-6 overflow-hidden">
               {embeddingUrl ? (
                 <img
                   src={embeddingUrl}
@@ -67,7 +67,7 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
                     if (parent) {
                       parent.innerHTML = `
                         <div class="text-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-slate-600 mx-auto mb-2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-slate-400 mx-auto mb-2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                           <p class="text-sm text-slate-500">暂无预览图</p>
                         </div>
                       `
@@ -76,7 +76,7 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
                 />
               ) : (
                 <div className="text-center">
-                  <ImageIcon className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+                  <ImageIcon className="w-10 h-10 text-slate-400 mx-auto mb-2" />
                   <p className="text-sm text-slate-500">栅格缩略图</p>
                 </div>
               )}
@@ -85,10 +85,10 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
             {/* Info grid */}
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 text-cyan-400 mt-1 shrink-0" />
+                <MapPin className="w-4 h-4 text-sky-500 mt-1 shrink-0" />
                 <div>
                   <p className="text-sm text-slate-500 mb-1">坐标边界</p>
-                  <p className="text-sm text-slate-300 font-mono">
+                  <p className="text-sm text-slate-700 font-mono">
                     [{patch.bounds_wgs84.map((v) => v.toFixed(4)).join(', ')}]
                   </p>
                   <p className="text-xs text-slate-500 mt-1">{patch.crs}</p>
@@ -96,29 +96,29 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
               </div>
 
               <div className="flex items-start gap-3">
-                <Calendar className="w-4 h-4 text-cyan-400 mt-1 shrink-0" />
+                <Calendar className="w-4 h-4 text-sky-500 mt-1 shrink-0" />
                 <div>
                   <p className="text-sm text-slate-500 mb-1">时间范围</p>
-                  <p className="text-sm text-slate-300">
+                  <p className="text-sm text-slate-700">
                     {patch.time_range[0]} ~ {patch.time_range[1]}
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <Database className="w-4 h-4 text-cyan-400 mt-1 shrink-0" />
+                <Database className="w-4 h-4 text-sky-500 mt-1 shrink-0" />
                 <div>
                   <p className="text-sm text-slate-500 mb-1">传感器数据</p>
                   <div className="space-y-1 mt-2">
                     {Object.entries(patch.sources).map(([src, count]) => (
                       <div
                         key={src}
-                        className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5"
+                        className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50"
                       >
-                        <span className="text-sm text-slate-300">
+                        <span className="text-sm text-slate-700">
                           {SOURCE_NAMES[src] || src}
                         </span>
-                        <span className="text-xs text-cyan-400 font-mono">
+                        <span className="text-xs text-sky-600 font-mono">
                           {count} 帧
                         </span>
                       </div>
