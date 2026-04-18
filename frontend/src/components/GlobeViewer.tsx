@@ -35,38 +35,38 @@ function Earth() {
   const meshRef = useRef<THREE.Mesh>(null)
 
   const earthMaterial = useMemo(() => {
-    return new THREE.MeshStandardMaterial({
-      color: '#0a1628',
-      emissive: '#0c1a2e',
-      emissiveIntensity: 0.3,
-      roughness: 0.8,
-      metalness: 0.4,
+    return new THREE.MeshBasicMaterial({
+      color: '#0f2440',
+      wireframe: false,
+    })
+  }, [])
+
+  // Wireframe overlay for visibility
+  const wireframeMaterial = useMemo(() => {
+    return new THREE.MeshBasicMaterial({
+      color: '#1e3a5f',
+      wireframe: true,
+      transparent: true,
+      opacity: 0.3,
     })
   }, [])
 
   return (
     <group>
       <mesh ref={meshRef} material={earthMaterial}>
-        <sphereGeometry args={[2, 64, 64]} />
+        <sphereGeometry args={[2, 32, 32]} />
+      </mesh>
+      <mesh material={wireframeMaterial}>
+        <sphereGeometry args={[2.01, 16, 16]} />
       </mesh>
 
       {/* Atmosphere glow */}
       <mesh>
-        <sphereGeometry args={[2.15, 64, 64]} />
+        <sphereGeometry args={[2.15, 32, 32]} />
         <meshBasicMaterial
           color="#22d3ee"
           transparent
-          opacity={0.03}
-          side={THREE.BackSide}
-        />
-      </mesh>
-
-      <mesh>
-        <sphereGeometry args={[2.25, 64, 64]} />
-        <meshBasicMaterial
-          color="#06b6d4"
-          transparent
-          opacity={0.015}
+          opacity={0.05}
           side={THREE.BackSide}
         />
       </mesh>
