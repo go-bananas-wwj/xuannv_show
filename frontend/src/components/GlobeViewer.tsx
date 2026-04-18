@@ -20,7 +20,7 @@ interface GlobeViewerProps {
 const HARBIN_LAT = 45.8
 const HARBIN_LON = 126.55
 const EARTH_RADIUS = 2
-const SPREAD_FACTOR = 15
+const SPREAD_FACTOR = 25
 
 function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
@@ -126,6 +126,16 @@ function RegionGlow({ patches }: { patches: PatchOverlay[] }) {
   )
 }
 
+function spreadLatLon(
+  lat: number,
+  lon: number,
+  centerLat: number,
+  centerLon: number,
+  factor: number
+): [number, number] {
+  return [centerLat + (lat - centerLat) * factor, centerLon + (lon - centerLon) * factor]
+}
+
 function createDotTexture(): THREE.Texture {
   const canvas = document.createElement('canvas')
   canvas.width = 64
@@ -142,16 +152,6 @@ function createDotTexture(): THREE.Texture {
   return tex
 }
 
-function spreadLatLon(
-  lat: number,
-  lon: number,
-  centerLat: number,
-  centerLon: number,
-  factor: number
-): [number, number] {
-  return [centerLat + (lat - centerLat) * factor, centerLon + (lon - centerLon) * factor]
-}
-
 function PatchPoints({
   patches,
   selectedPatchId,
@@ -159,7 +159,6 @@ function PatchPoints({
   dataSource,
 }: GlobeViewerProps) {
   const dotTex = useMemo(() => createDotTexture(), [])
-
   const displayPatches = useMemo(() => {
     if (patches.length <= 200) return patches
     const step = Math.ceil(patches.length / 200)
@@ -227,7 +226,7 @@ function PatchPoints({
         <bufferAttribute attach="attributes-color" args={[colorArray, 3]} />
       </bufferGeometry>
       <pointsMaterial
-        size={0.25}
+        size={0.35}
         vertexColors
         map={dotTex}
         transparent
