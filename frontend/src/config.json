@@ -1,0 +1,46 @@
+{
+  "region": "harbin",
+  "name": "哈尔滨新区",
+  "nameEn": "Harbin New District",
+  "bounds": [126.2, 45.6, 126.9, 46.0],
+  "boundsUtm": [306797.64, 5068572.38, 456077.64, 5217052.38],
+  "crs": "EPSG:32652",
+  "patches": "./data/harbin/patches_meta.json",
+  "embeddings": "./data/harbin/embeddings/",
+  "results": "./data/harbin/results/",
+  "available_heads": [
+    {
+      "id": "change_detection",
+      "name": "变化检测",
+      "nameEn": "Change Detection",
+      "icon": "flame",
+      "description": "像素级二元变化检测，输出变化概率热力图",
+      "color": "#f97316"
+    },
+    {
+      "id": "multiclass_cd",
+      "name": "多类别变化检测",
+      "nameEn": "Multi-Class Change Detection",
+      "icon": "layers",
+      "description": "construction / demolition / land_conversion 三分类变化",
+      "color": "#06b6d4"
+    },
+    {
+      "id": "fewshot",
+      "name": "少样本分类",
+      "nameEn": "Few-Shot Classification",
+      "icon": "brain",
+      "description": "基于原型网络的少样本遥感图像分类",
+      "color": "#8b5cf6"
+    }
+  ],
+  "time_range": ["2023-01", "2025-10"],
+  "sources": ["S2", "S1", "Landsat", "S2-HR", "S1-HR"],
+  "sourceDisplayNames": {
+    "S2": "Sentinel-2",
+    "S1": "Sentinel-1",
+    "Landsat": "Landsat 8/9",
+    "S2-HR": "高分光学",
+    "S1-HR": "高分雷达"
+  }
+}
