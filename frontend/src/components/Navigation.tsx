@@ -1,27 +1,10 @@
 import { useState, useEffect } from 'react'
-import {
-  BookOpen,
-  LayoutGrid,
-  ScanSearch,
-  Flame,
-  Waves,
-  BarChart3,
-  Bot,
-  Menu,
-  X,
-} from 'lucide-react'
+import { BookOpen, LayoutGrid, Waves, Bot, Menu, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 interface NavigationProps {
   onNavigate: (
-    section:
-      | 'intro'
-      | 'data'
-      | 'anomaly'
-      | 'cd'
-      | 'downstream'
-      | 'performance'
-      | 'agent'
+    section: 'intro' | 'data' | 'downstream' | 'agent'
   ) => void
 }
 
@@ -34,15 +17,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
     const handleScroll = () => {
       setScrolled(window.scrollY > 50)
 
-      const sections = [
-        'intro',
-        'data',
-        'anomaly',
-        'cd',
-        'downstream',
-        'performance',
-        'agent',
-      ]
+      const sections = ['intro', 'data', 'downstream', 'agent']
       for (const id of sections) {
         const el = document.getElementById(`section-${id}`)
         if (el) {
@@ -61,10 +36,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
   const navItems = [
     { id: 'intro' as const, label: '项目介绍', icon: BookOpen },
     { id: 'data' as const, label: '数据浏览', icon: LayoutGrid },
-    { id: 'anomaly' as const, label: '空间异常', icon: ScanSearch },
-    { id: 'cd' as const, label: '变化检测', icon: Flame },
     { id: 'downstream' as const, label: '下游任务', icon: Waves },
-    { id: 'performance' as const, label: '性能分析', icon: BarChart3 },
     { id: 'agent' as const, label: '智能体报告', icon: Bot },
   ]
 
@@ -85,7 +57,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
           </span>
         </div>
 
-        <div className="hidden lg:flex items-center gap-1">
+        <div className="hidden md:flex items-center gap-1">
           {navItems.map((item) => (
             <button
               key={item.id}
@@ -104,7 +76,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
         </div>
 
         <button
-          className="lg:hidden text-slate-600"
+          className="md:hidden text-slate-600"
           onClick={() => setMobileOpen(!mobileOpen)}
         >
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -112,7 +84,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
       </div>
 
       {mobileOpen && (
-        <div className="lg:hidden glass-strong mt-2 mx-4 rounded-xl p-4 space-y-2 shadow-lg">
+        <div className="md:hidden glass-strong mt-2 mx-4 rounded-xl p-4 space-y-2 shadow-lg">
           {navItems.map((item) => (
             <button
               key={item.id}
