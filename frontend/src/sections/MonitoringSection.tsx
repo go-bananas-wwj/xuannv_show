@@ -1,74 +1,70 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Waves, Play, ImageOff } from 'lucide-react'
+import { Waves, Play, ImageOff, Lock } from 'lucide-react'
 import TaskHeadSelector from '@/components/TaskHeadSelector'
 import GlassPanel from '@/components/GlassPanel'
+import MosaicViewer from '@/components/MosaicViewer'
+import PatchDetailModal from '@/components/PatchDetailModal'
 import config from '@/config.json'
 
 const heads = config.available_heads
 
-const VERSIONS = ['v2', 'v4']
-
-const MONTHS = [
-  '2023-01', '2023-02', '2023-03', '2023-04', '2023-05', '2023-06',
-  '2023-07', '2023-08', '2023-09', '2023-10', '2023-11', '2023-12',
-  '2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06',
-  '2024-07', '2024-08', '2024-09', '2024-10', '2024-11', '2024-12',
-  '2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06',
-  '2025-07', '2025-08', '2025-09', '2025-10',
-]
-
-const HEAD_METRICS: Record<string, { label: string; value: string }[]> = {
-  change_detection: [
-    { label: 'Task', value: '像素级二元变化检测' },
-    { label: 'Metric', value: 'AUC-ROC / F1' },
-  ],
-  worldcover: [
-    { label: 'Task', value: '土地覆盖分类（11类）' },
-    { label: 'Classes', value: '森林、农田、草地、建筑、裸地、水体等' },
-    { label: 'Metric', value: 'Balanced Accuracy / F1 (macro)' },
-  ],
-  dynamic_world: [
-    { label: 'Task', value: '土地利用分类（9类）' },
-    { label: 'Classes', value: '水体、树木、草地、作物、建筑、裸地等' },
-    { label: 'Metric', value: 'Balanced Accuracy / F1 (macro)' },
-  ],
-  jrc_water: [
-    { label: 'Task', value: '水体提取' },
-    { label: 'Classes', value: '非水体、水体' },
-    { label: 'Metric', value: 'Balanced Accuracy / F1 (binary)' },
-  ],
-  building_extraction: [
-    { label: 'Task', value: '建筑物提取' },
-    { label: 'Classes', value: '非建筑、建筑' },
-    { label: 'Metric', value: 'Balanced Accuracy / F1 / IoU (binary)' },
-  ],
+// 从 public/data/patches_meta.json 加载 patches 信息
+interface PatchInfo {
+  patch_id: string
+  ix: number
+  iy: number
 }
 
 export default function MonitoringSection() {
   const [activeHead, setActiveHead] = useState<string | null>(null)
-  const [version, setVersion] = useState('v2')
-  const [beforePeriod, setBeforePeriod] = useState('2024-10')
-  const [afterPeriod, setAfterPeriod] = useState('2025-10')
-  const [singlePeriod, setSinglePeriod] = useState('2025-10')
-  const [resultUrl, setResultUrl] = useState<string | null>(null)
+  const [selectedPeriod, setSelectedPeriod] = useState('2025-04_vs_2025-10')
+  const [availablePeriods, setAvailablePeriods] = useState<{ label: string; value: string }[]>([])
+  const [mosaicUrl, setMosaicUrl] = useState<string | null>(null)
+  const [patches, setPatches] = useState<PatchInfo[]>([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [, setLoadError] = useState<string | null>(null)
+  const [detailPatch, setDetailPatch] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const selectedHead = heads.find((h) => h.id === activeHead)
   const isChangeDetection = selectedHead?.is_change_detection ?? false
+  const isAvailable = activeHead === 'change_detection'
 
-  const currentPeriod = isChangeDetection
-    ? `${beforePeriod}_vs_${afterPeriod}`
-    : singlePeriod
+  // 加载 patches 元数据
+  useEffect(() => {
+    fetch('/data/patches_meta.json')
+      .then((res) => res.json())
+      .then((data) => {
+        setPatches(data.map((p: any) => ({ patch_id: p.patch_id, ix: p.ix, iy: p.iy })))
+      })
+      .catch((err) => console.error('Failed to load patches meta:', err))
+  }, [])
 
-  const handleLoadResult = async () => {
+  // 加载可用 period 列表
+  useEffect(() => {
     if (!activeHead) return
-    setLoading(true)
-    setError(null)
-    setResultUrl(null)
+    fetch(`/api/heads/${activeHead}/available-months`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.periods) {
+          setAvailablePeriods(data.periods)
+          if (data.periods.length > 0 && !data.periods.find((p: any) => p.value === selectedPeriod)) {
+            setSelectedPeriod(data.periods[0].value)
+          }
+        }
+      })
+      .catch((err) => console.error('Failed to load periods:', err))
+  }, [activeHead])
 
-    const url = `/api/heads/${activeHead}/result?period=${encodeURIComponent(currentPeriod)}&region=harbin&version=${version}`
+  // 加载 mosaic
+  const loadMosaic = useCallback(async (head: string, period: string) => {
+    if (!head || head !== 'change_detection') return
+    setLoading(true)
+    setLoadError(null)
+    setMosaicUrl(null)
+
+    const url = `/api/heads/${head}/mosaic?period=${encodeURIComponent(period)}`
     try {
       const res = await fetch(url)
       if (!res.ok) {
@@ -76,16 +72,32 @@ export default function MonitoringSection() {
         throw new Error(text || `HTTP ${res.status}`)
       }
       const blob = await res.blob()
-      setResultUrl(URL.createObjectURL(blob))
+      setMosaicUrl(URL.createObjectURL(blob))
     } catch (err: any) {
-      setError(err.message || '加载失败')
+      setLoadError(err.message || '加载失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  // 点击 patch
+  const handlePatchClick = useCallback((patchId: string) => {
+    setDetailPatch(patchId)
+    setIsModalOpen(true)
+  }, [])
+
+  // 自动加载
+  useEffect(() => {
+    if (activeHead && isAvailable) {
+      loadMosaic(activeHead, selectedPeriod)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeHead, selectedPeriod, isAvailable])
+
+  const tileSize = 128
 
   return (
-    <section id="section-downstream" className="relative py-24 px-4">
+    <section id="section-downstream" className="relative py-24 px-4 snap-start">
       <div className="max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -103,7 +115,7 @@ export default function MonitoringSection() {
             </h2>
           </div>
           <p className="text-slate-500 max-w-2xl">
-            基于预训练 embedding 的像素级分类下游任务评估。选择 Task Head 查看不同下游任务的推理结果。
+            基于预训练 embedding 的像素级变化检测。选择任务和时间范围，查看全区域 mosaic 大图，点击任意栅格查看详情。
           </p>
         </motion.div>
 
@@ -137,73 +149,46 @@ export default function MonitoringSection() {
                     </div>
                     <p className="text-sm text-slate-500">{selectedHead.description}</p>
 
-                    <div className="pt-2 border-t border-slate-100 space-y-3">
-                      <div>
-                        <label className="block text-sm text-slate-500 mb-1.5">模型版本</label>
-                        <select
-                          value={version}
-                          onChange={(e) => setVersion(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
-                        >
-                          {VERSIONS.map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
+                    {/* 不可用提示 */}
+                    {!isAvailable && (
+                      <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm">
+                        <Lock className="w-4 h-4 shrink-0" />
+                        <span>该任务模型训练中，敬请期待</span>
                       </div>
+                    )}
 
+                    <div className="pt-2 border-t border-slate-100 space-y-3">
                       {isChangeDetection ? (
-                        <>
-                          <div>
-                            <label className="block text-sm text-slate-500 mb-1.5">变化前时间</label>
-                            <select
-                              value={beforePeriod}
-                              onChange={(e) => setBeforePeriod(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
-                            >
-                              {MONTHS.map((m) => (
-                                <option key={m} value={m}>
-                                  {m}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm text-slate-500 mb-1.5">变化后时间</label>
-                            <select
-                              value={afterPeriod}
-                              onChange={(e) => setAfterPeriod(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
-                            >
-                              {MONTHS.map((m) => (
-                                <option key={m} value={m}>
-                                  {m}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </>
+                        <div>
+                          <label className="block text-sm text-slate-500 mb-1.5">时间范围</label>
+                          <select
+                            value={selectedPeriod}
+                            onChange={(e) => setSelectedPeriod(e.target.value)}
+                            disabled={!isAvailable}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300 disabled:opacity-50 disabled:bg-slate-50"
+                          >
+                            {availablePeriods.map((p) => (
+                              <option key={p.value} value={p.value}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       ) : (
                         <div>
                           <label className="block text-sm text-slate-500 mb-1.5">目标月份</label>
                           <select
-                            value={singlePeriod}
-                            onChange={(e) => setSinglePeriod(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
+                            disabled={!isAvailable}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300 disabled:opacity-50 disabled:bg-slate-50"
                           >
-                            {MONTHS.map((m) => (
-                              <option key={m} value={m}>
-                                {m}
-                              </option>
-                            ))}
+                            <option>2025-10</option>
                           </select>
                         </div>
                       )}
 
                       <button
-                        onClick={handleLoadResult}
-                        disabled={loading}
+                        onClick={() => loadMosaic(activeHead!, selectedPeriod)}
+                        disabled={loading || !isAvailable}
                         className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-sky-500 text-white text-sm font-medium hover:bg-sky-600 transition-colors disabled:opacity-50"
                       >
                         <Play className="w-4 h-4" />
@@ -213,46 +198,41 @@ export default function MonitoringSection() {
                   </GlassPanel>
 
                   <GlassPanel className="p-5">
-                    <h4 className="text-sm font-medium text-slate-600 mb-3">任务信息</h4>
-                    <div className="space-y-2">
-                      {(HEAD_METRICS[activeHead] || []).map((m) => (
-                        <div key={m.label}>
-                          <div className="text-xs text-slate-400">{m.label}</div>
-                          <div className="text-sm text-slate-700">{m.value}</div>
-                        </div>
-                      ))}
+                    <h4 className="text-sm font-medium text-slate-600 mb-3">操作说明</h4>
+                    <div className="space-y-2 text-xs text-slate-500">
+                      <div className="flex items-start gap-2">
+                        <span className="w-5 h-5 rounded bg-slate-100 flex items-center justify-center shrink-0 text-slate-400 font-mono">1</span>
+                        <span>鼠标滚轮缩放 mosaic 大图</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="w-5 h-5 rounded bg-slate-100 flex items-center justify-center shrink-0 text-slate-400 font-mono">2</span>
+                        <span>拖拽平移查看不同区域</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="w-5 h-5 rounded bg-slate-100 flex items-center justify-center shrink-0 text-slate-400 font-mono">3</span>
+                        <span>点击任意栅格查看详情弹窗</span>
+                      </div>
                     </div>
                   </GlassPanel>
                 </div>
 
                 {/* Right result area */}
                 <div className="lg:flex-1">
-                  <GlassPanel className="h-[600px] flex flex-col">
-                    {resultUrl ? (
-                      <div className="flex-1 overflow-auto p-4">
-                        <img
-                          src={resultUrl}
-                          alt={`${selectedHead.name} result`}
-                          className="max-w-full h-auto mx-auto rounded-lg"
-                        />
-                      </div>
-                    ) : error ? (
-                      <div className="flex-1 flex items-center justify-center">
-                        <div className="text-center">
-                          <ImageOff className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                          <p className="text-sm text-slate-500">{error}</p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            该任务可能尚未预计算结果图
-                          </p>
-                        </div>
-                      </div>
+                  <GlassPanel className="h-[600px] flex flex-col p-0 overflow-hidden">
+                    {isAvailable ? (
+                      <MosaicViewer
+                        mosaicUrl={mosaicUrl}
+                        patches={patches}
+                        tileSize={tileSize}
+                        onPatchClick={handlePatchClick}
+                        loading={loading}
+                      />
                     ) : (
                       <div className="flex-1 flex items-center justify-center">
                         <div className="text-center">
-                          <Waves className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                          <p className="text-slate-400">
-                            选择参数后点击"查看结果"加载推理图
-                          </p>
+                          <ImageOff className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                          <p className="text-slate-400">该任务模型正在训练中</p>
+                          <p className="text-xs text-slate-400 mt-1">敬请期待后续更新</p>
                         </div>
                       </div>
                     )}
@@ -263,6 +243,18 @@ export default function MonitoringSection() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Patch Detail Modal */}
+      <PatchDetailModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false)
+          setDetailPatch(null)
+        }}
+        patchId={detailPatch}
+        headId={activeHead || ''}
+        period={selectedPeriod}
+      />
     </section>
   )
 }
