@@ -1,6 +1,7 @@
 """Time×Source Matrix 渲染服务 — 为单个 patch 生成数据源×时间矩阵图."""
 from __future__ import annotations
 
+import functools
 import io
 import re
 from pathlib import Path
@@ -53,6 +54,17 @@ WORLDCOVER_COLORS = {
     100: (100, 100, 100),
 }
 
+# ── 安全校验 ──
+_VALID_PATCH_ID_RE = re.compile(r"^patch_\d{6}$")
+_MAX_MATRIX_COLS = 36  # 限制最大列数，防止超大 figure
+_MAX_MATRIX_ROWS = 12  # 限制最大行数
+_MATRIX_DPI = 100      # 降低 DPI 减少内存占用
+
+
+def validate_patch_id(patch_id: str) -> bool:
+    """校验 patch_id 格式，防止路径遍历."""
+    return bool(_VALID_PATCH_ID_RE.match(patch_id))
+
 
 def _colorize_worldcover(wc_arr: np.ndarray) -> np.ndarray:
     """WorldCover 标签 [H, W] → RGB [H, W, 3] uint8."""
@@ -71,13 +83,19 @@ def _fig_to_png_bytes(fig: plt.Figure) -> bytes:
     return buf.getvalue()
 
 
+@functools.lru_cache(maxsize=64)
 def render_time_source_matrix(patch_id: str) -> bytes | None:
     """渲染 时间×数据源 矩阵，返回 PNG bytes.
 
     数据来源:
         - 主目录: /workspace/raw/harbin_scenes/{source}/{patch_id}/
         - 回退:   /workspace/raw/harbin/{source}/{patch_id}/
+    
+    结果通过 LRU 缓存（maxsize=64），避免重复渲染同一 patch。
     """
+    if not validate_patch_id(patch_id):
+        return None
+
     patch_id_name = patch_id  # e.g. "patch_000000"
 
     TEMPORAL_ORDER = [
@@ -115,9 +133,10 @@ def render_time_source_matrix(patch_id: str) -> bytes | None:
 
     def _render_thumb(ax, tif_path: Path, src_name: str) -> None:
         """渲染单个缩略图到 axes."""
+        ds = None
         try:
-            with rasterio.open(str(tif_path)) as ds:
-                data = ds.read()
+            ds = rasterio.open(str(tif_path))
+            data = ds.read()
             if src_name in ("s2", "landsat", "s2_hr", "highres") and data.shape[0] >= 3:
                 if src_name in ("s2", "s2_hr") and data.shape[0] >= 4:
                     rgb = data[[2, 1, 0]].astype(np.float32)
@@ -157,6 +176,9 @@ def render_time_source_matrix(patch_id: str) -> bytes | None:
             ax.set_facecolor("white")
             for spine in ax.spines.values():
                 spine.set_visible(False)
+        finally:
+            if ds is not None:
+                ds.close()
 
     # ── 收集时序数据 ──
     temporal_available: list[tuple[str, dict[str, list[Path]]]] = []
@@ -200,7 +222,7 @@ def render_time_source_matrix(patch_id: str) -> bytes | None:
                 static_available.append((src, files[0]))
 
     if not temporal_available and not static_available:
-        fig, ax = plt.subplots(figsize=(8, 2), dpi=100)
+        fig, ax = plt.subplots(figsize=(8, 2), dpi=80)
         ax.text(0.5, 0.5, "No data sources available",
                 ha="center", va="center", fontsize=14)
         ax.axis("off")
@@ -214,25 +236,30 @@ def render_time_source_matrix(patch_id: str) -> bytes | None:
     n_static = len(static_available)
     has_static = n_static > 0
 
-    n_cols = max(n_months, n_static, 1)
-    n_rows = n_temporal + (1 if has_static else 0)
+    # ── 限制矩阵尺寸，防止内存爆炸 ──
+    n_cols = min(max(n_months, n_static, 1), _MAX_MATRIX_COLS)
+    n_rows = min(n_temporal + (1 if has_static else 0), _MAX_MATRIX_ROWS)
 
-    cell_w, cell_h = 2.0, 1.8
-    fig_w = 2.5 + cell_w * n_cols + 0.5
-    fig_h = 1.5 + cell_h * n_rows + 0.5
+    # 如果月份被截断，只保留前 n_cols 个
+    if n_months > _MAX_MATRIX_COLS:
+        sorted_months = sorted_months[:_MAX_MATRIX_COLS]
+
+    cell_w, cell_h = 1.6, 1.4
+    fig_w = 2.0 + cell_w * n_cols + 0.3
+    fig_h = 1.2 + cell_h * n_rows + 0.3
     fig, axes = plt.subplots(
         n_rows, n_cols,
-        figsize=(max(fig_w, 12), max(fig_h, 5)),
-        dpi=120, squeeze=False,
+        figsize=(max(fig_w, 10), max(fig_h, 4)),
+        dpi=_MATRIX_DPI, squeeze=False,
     )
 
     # ── 渲染时序行 ──
-    for row, (src_name, month_groups) in enumerate(temporal_available):
+    for row, (src_name, month_groups) in enumerate(temporal_available[:n_rows - (1 if has_static else 0)]):
         for col in range(n_cols):
             ax = axes[row, col]
             ax.set_xticks([])
             ax.set_yticks([])
-            if col < n_months:
+            if col < len(sorted_months):
                 month = sorted_months[col]
                 files = month_groups.get(month, [])
                 if files:
@@ -240,7 +267,7 @@ def render_time_source_matrix(patch_id: str) -> bytes | None:
                     if len(files) > 1:
                         ax.text(
                             0.95, 0.05, f"x{len(files)}",
-                            transform=ax.transAxes, fontsize=7,
+                            transform=ax.transAxes, fontsize=6,
                             color="white", ha="right", va="bottom",
                             bbox=dict(boxstyle="round,pad=0.1",
                                       fc="black", alpha=0.6),
@@ -253,37 +280,38 @@ def render_time_source_matrix(patch_id: str) -> bytes | None:
                 ax.axis("off")
 
     # 时序列标题（月份）
-    for col in range(min(n_months, n_cols)):
-        axes[0, col].set_title(sorted_months[col], fontsize=10,
-                               fontweight="bold", pad=8)
+    for col in range(min(len(sorted_months), n_cols)):
+        axes[0, col].set_title(sorted_months[col], fontsize=8,
+                               fontweight="bold", pad=6)
 
     # 时序行标签
-    for row, (src_name, _) in enumerate(temporal_available):
+    for row, (src_name, _) in enumerate(temporal_available[:n_rows - (1 if has_static else 0)]):
         display = SOURCE_DISPLAY_NAMES.get(src_name, src_name)
-        axes[row, 0].set_ylabel(display, fontsize=11, rotation=0,
-                                labelpad=100, va="center", ha="right")
+        axes[row, 0].set_ylabel(display, fontsize=9, rotation=0,
+                                labelpad=80, va="center", ha="right")
 
     # ── 渲染静态行 ──
     if has_static:
         static_row = n_rows - 1
+        static_to_show = static_available[:n_cols]
         for col in range(n_cols):
             ax = axes[static_row, col]
             ax.set_xticks([])
             ax.set_yticks([])
-            if col < n_static:
-                src_name, tif_path = static_available[col]
+            if col < len(static_to_show):
+                src_name, tif_path = static_to_show[col]
                 _render_thumb(ax, tif_path, src_name)
                 display = SOURCE_DISPLAY_NAMES.get(src_name, src_name)
-                ax.set_xlabel(display, fontsize=8, labelpad=4)
+                ax.set_xlabel(display, fontsize=7, labelpad=3)
             else:
                 ax.axis("off")
         axes[static_row, 0].set_ylabel(
-            "Static", fontsize=11, rotation=0,
-            labelpad=100, va="center", ha="right", fontweight="bold",
+            "Static", fontsize=9, rotation=0,
+            labelpad=80, va="center", ha="right", fontweight="bold",
         )
 
     fig.suptitle(f"Time × Source Matrix : {patch_id}",
-                 fontsize=15, fontweight="bold", y=0.98)
+                 fontsize=12, fontweight="bold", y=0.98)
     fig.patch.set_facecolor("white")
     fig.subplots_adjust(left=0.12, right=0.98, top=0.90, bottom=0.06,
                         wspace=0.08, hspace=0.20)
