@@ -14,40 +14,45 @@
       "name": "变化检测",
       "nameEn": "Change Detection",
       "icon": "flame",
-      "description": "像素级二元变化检测，输出变化概率热力图",
-      "color": "#f59e0b"
+      "description": "检测两期影像之间的像素级变化区域",
+      "color": "#f59e0b",
+      "is_change_detection": true
     },
     {
       "id": "worldcover",
-      "name": "WorldCover分类",
-      "nameEn": "WorldCover Land Cover",
+      "name": "土地覆盖分类",
+      "nameEn": "Land Cover Classification",
       "icon": "globe",
-      "description": "ESA WorldCover 11类土地覆盖分类",
-      "color": "#22c55e"
+      "description": "识别地表覆盖类型，如森林、农田、建筑、水体等",
+      "color": "#22c55e",
+      "is_change_detection": false
     },
     {
       "id": "dynamic_world",
-      "name": "Dynamic World分类",
-      "nameEn": "Dynamic World Land Use",
+      "name": "土地利用分类",
+      "nameEn": "Land Use Classification",
       "icon": "trees",
-      "description": "Google Dynamic World 9类土地利用分类",
-      "color": "#3b82f6"
+      "description": "识别土地利用方式，如耕地、建筑用地、植被等",
+      "color": "#3b82f6",
+      "is_change_detection": false
     },
     {
       "id": "jrc_water",
-      "name": "JRC水体提取",
-      "nameEn": "JRC Water Extraction",
+      "name": "水体提取",
+      "nameEn": "Water Body Extraction",
       "icon": "waves",
-      "description": "JRC Global Surface Water 水体提取",
-      "color": "#06b6d4"
+      "description": "提取河流、湖泊等水体区域",
+      "color": "#06b6d4",
+      "is_change_detection": false
     },
     {
       "id": "building_extraction",
       "name": "建筑物提取",
       "nameEn": "Building Extraction",
       "icon": "building2",
-      "description": "基于WorldCover Built-up的建筑物提取",
-      "color": "#ef4444"
+      "description": "识别和提取建筑物分布范围",
+      "color": "#ef4444",
+      "is_change_detection": false
     }
   ],
   "time_range": ["2023-01", "2025-10"],

@@ -20,9 +20,10 @@ async def get_head_result(
     head_id: str,
     period: str = Query(..., description="Time period, e.g. 2023-10_vs_2024-10"),
     region: str = Query("harbin", description="Region name"),
+    version: str = Query("v2", description="Model version, e.g. v2 or v4"),
 ) -> Response:
     """返回某 head 在指定时间段的结果图."""
-    path = data_loader.get_head_result_path(head_id, period, region)
+    path = data_loader.get_head_result_path(head_id, period, region, version)
     if path is None:
         raise HTTPException(
             status_code=404,

@@ -53,11 +53,25 @@ class DataLoader:
         return None
 
     def get_head_result_path(
-        self, head_id: str, period: str, region: str = "harbin"
+        self, head_id: str, period: str, region: str = "harbin", version: str = "v2"
     ) -> Path | None:
         """返回 head 推理结果图路径."""
+        if version == "v4":
+            v4_dir = Path("/workspace/outputs/aef_qwen_v4_official")
+            if head_id == "change_detection":
+                # v4 变化检测结果在 monthly_cd_head 目录
+                for ext in (".png", ".jpg", ".tif"):
+                    path = v4_dir / "monthly_cd_head" / f"{period}{ext}"
+                    if path.exists():
+                        return path
+            # 其他任务尝试 visualization 目录
+            for ext in (".png", ".jpg", ".tif"):
+                path = v4_dir / "visualization" / f"{head_id}_{period}{ext}"
+                if path.exists():
+                    return path
+            return None
+
         results_dir = self._get_region_dir(region) / "results" / head_id
-        # 尝试多种扩展名
         for ext in (".png", ".jpg", ".tif"):
             path = results_dir / f"{period}{ext}"
             if path.exists():

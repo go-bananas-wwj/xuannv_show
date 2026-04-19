@@ -7,14 +7,15 @@ import config from '@/config.json'
 
 const heads = config.available_heads
 
-const VERSIONS = ['v1', 'v2', 'v3']
-const PERIODS = [
-  '2023-10_vs_2024-10',
-  '2024-04_vs_2025-04',
-  '2024-08_vs_2025-08',
-  '2024-10_vs_2025-10',
-  '2023_vs_2024',
-  '2024_vs_2025',
+const VERSIONS = ['v2', 'v4']
+
+const MONTHS = [
+  '2023-01', '2023-02', '2023-03', '2023-04', '2023-05', '2023-06',
+  '2023-07', '2023-08', '2023-09', '2023-10', '2023-11', '2023-12',
+  '2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06',
+  '2024-07', '2024-08', '2024-09', '2024-10', '2024-11', '2024-12',
+  '2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06',
+  '2025-07', '2025-08', '2025-09', '2025-10',
 ]
 
 const HEAD_METRICS: Record<string, { label: string; value: string }[]> = {
@@ -23,23 +24,23 @@ const HEAD_METRICS: Record<string, { label: string; value: string }[]> = {
     { label: 'Metric', value: 'AUC-ROC / F1' },
   ],
   worldcover: [
-    { label: 'Task', value: 'ESA WorldCover 11类分类' },
-    { label: 'Classes', value: 'Tree, Shrubland, Grassland, Cropland, Built-up, Bare, Snow, Water, Wetland, Mangroves, Moss' },
+    { label: 'Task', value: '土地覆盖分类（11类）' },
+    { label: 'Classes', value: '森林、农田、草地、建筑、裸地、水体等' },
     { label: 'Metric', value: 'Balanced Accuracy / F1 (macro)' },
   ],
   dynamic_world: [
-    { label: 'Task', value: 'Google Dynamic World 9类分类' },
-    { label: 'Classes', value: 'Water, Trees, Grass, Flooded Veg, Crops, Shrub/Scrub, Built, Bare, Snow/Ice' },
+    { label: 'Task', value: '土地利用分类（9类）' },
+    { label: 'Classes', value: '水体、树木、草地、作物、建筑、裸地等' },
     { label: 'Metric', value: 'Balanced Accuracy / F1 (macro)' },
   ],
   jrc_water: [
-    { label: 'Task', value: 'JRC Global Surface Water 水体提取' },
-    { label: 'Classes', value: 'Non-water, Water' },
+    { label: 'Task', value: '水体提取' },
+    { label: 'Classes', value: '非水体、水体' },
     { label: 'Metric', value: 'Balanced Accuracy / F1 (binary)' },
   ],
   building_extraction: [
-    { label: 'Task', value: '基于 WorldCover Built-up 的建筑物提取' },
-    { label: 'Classes', value: 'Non-building, Building' },
+    { label: 'Task', value: '建筑物提取' },
+    { label: 'Classes', value: '非建筑、建筑' },
     { label: 'Metric', value: 'Balanced Accuracy / F1 / IoU (binary)' },
   ],
 }
@@ -47,12 +48,19 @@ const HEAD_METRICS: Record<string, { label: string; value: string }[]> = {
 export default function MonitoringSection() {
   const [activeHead, setActiveHead] = useState<string | null>(null)
   const [version, setVersion] = useState('v2')
-  const [period, setPeriod] = useState(PERIODS[0])
+  const [beforePeriod, setBeforePeriod] = useState('2024-10')
+  const [afterPeriod, setAfterPeriod] = useState('2025-10')
+  const [singlePeriod, setSinglePeriod] = useState('2025-10')
   const [resultUrl, setResultUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const selectedHead = heads.find((h) => h.id === activeHead)
+  const isChangeDetection = selectedHead?.is_change_detection ?? false
+
+  const currentPeriod = isChangeDetection
+    ? `${beforePeriod}_vs_${afterPeriod}`
+    : singlePeriod
 
   const handleLoadResult = async () => {
     if (!activeHead) return
@@ -60,7 +68,7 @@ export default function MonitoringSection() {
     setError(null)
     setResultUrl(null)
 
-    const url = `/api/heads/${activeHead}/result?period=${encodeURIComponent(period)}&region=harbin`
+    const url = `/api/heads/${activeHead}/result?period=${encodeURIComponent(currentPeriod)}&region=harbin&version=${version}`
     try {
       const res = await fetch(url)
       if (!res.ok) {
@@ -145,20 +153,53 @@ export default function MonitoringSection() {
                         </select>
                       </div>
 
-                      <div>
-                        <label className="block text-sm text-slate-500 mb-1.5">时间周期</label>
-                        <select
-                          value={period}
-                          onChange={(e) => setPeriod(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
-                        >
-                          {PERIODS.map((p) => (
-                            <option key={p} value={p}>
-                              {p}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {isChangeDetection ? (
+                        <>
+                          <div>
+                            <label className="block text-sm text-slate-500 mb-1.5">变化前时间</label>
+                            <select
+                              value={beforePeriod}
+                              onChange={(e) => setBeforePeriod(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
+                            >
+                              {MONTHS.map((m) => (
+                                <option key={m} value={m}>
+                                  {m}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm text-slate-500 mb-1.5">变化后时间</label>
+                            <select
+                              value={afterPeriod}
+                              onChange={(e) => setAfterPeriod(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
+                            >
+                              {MONTHS.map((m) => (
+                                <option key={m} value={m}>
+                                  {m}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      ) : (
+                        <div>
+                          <label className="block text-sm text-slate-500 mb-1.5">目标月份</label>
+                          <select
+                            value={singlePeriod}
+                            onChange={(e) => setSinglePeriod(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
+                          >
+                            {MONTHS.map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
                       <button
                         onClick={handleLoadResult}
