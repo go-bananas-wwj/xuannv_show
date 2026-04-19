@@ -5,3 +5,4 @@ numpy==1.26.4
 pillow==11.0.0
 rasterio==1.4.2
 pydantic==2.9.2
+matplotlib==3.9.0

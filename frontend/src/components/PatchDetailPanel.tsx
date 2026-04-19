@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, MapPin, Calendar, Database, Image as ImageIcon } from 'lucide-react'
 
@@ -34,9 +34,42 @@ function formatPatchId(patchId: string): string {
 }
 
 export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelProps) {
-  const embeddingUrl = patch
-    ? `/data/embeddings/v2/${patch.patch_id}.png`
-    : null
+  const [matrixUrl, setMatrixUrl] = useState<string | null>(null)
+  const [matrixLoading, setMatrixLoading] = useState(false)
+  const [matrixError, setMatrixError] = useState(false)
+
+  // Fetch Time×Source Matrix when patch changes
+  useEffect(() => {
+    if (!patch) {
+      setMatrixUrl(null)
+      setMatrixError(false)
+      return
+    }
+
+    setMatrixLoading(true)
+    setMatrixError(false)
+
+    fetch(`/api/patches/${patch.patch_id}/matrix`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Matrix not available')
+        return res.blob()
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob)
+        setMatrixUrl(url)
+        setMatrixLoading(false)
+      })
+      .catch(() => {
+        setMatrixError(true)
+        setMatrixLoading(false)
+      })
+
+    return () => {
+      if (matrixUrl) {
+        URL.revokeObjectURL(matrixUrl)
+      }
+    }
+  }, [patch?.patch_id])
 
   // Close on Escape key
   useEffect(() => {
@@ -65,7 +98,7 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.92, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="w-full max-w-2xl mx-4 rounded-2xl border border-slate-200/80 bg-white/80 backdrop-blur-xl shadow-2xl overflow-hidden"
+            className="w-full max-w-3xl mx-4 rounded-2xl border border-slate-200/80 bg-white/80 backdrop-blur-xl shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -81,33 +114,33 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
               </button>
             </div>
 
-            <div className="p-6 max-h-[70vh] overflow-y-auto">
-              {/* Embedding preview image */}
-              <div className="aspect-video rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center mb-6 overflow-hidden">
-                {embeddingUrl ? (
-                  <img
-                    src={embeddingUrl}
-                    alt={`${patch.patch_id} embedding preview`}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none'
-                      const parent = (e.target as HTMLImageElement).parentElement
-                      if (parent) {
-                        parent.innerHTML = `
-                          <div class="text-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-slate-400 mx-auto mb-2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                            <p class="text-sm text-slate-500">暂无预览图</p>
-                          </div>
-                        `
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="text-center">
-                    <ImageIcon className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                    <p className="text-sm text-slate-500">栅格缩略图</p>
-                  </div>
-                )}
+            <div className="p-6 max-h-[75vh] overflow-y-auto">
+              {/* Time×Source Matrix */}
+              <div className="mb-6">
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">
+                  Time × Source Matrix
+                </p>
+                <div className="w-full overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                  {matrixLoading ? (
+                    <div className="flex items-center justify-center h-48">
+                      <div className="w-8 h-8 border-2 border-sky-300 border-t-sky-500 rounded-full animate-spin" />
+                    </div>
+                  ) : matrixError || !matrixUrl ? (
+                    <div className="flex items-center justify-center h-48 text-slate-400">
+                      <div className="text-center">
+                        <ImageIcon className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">暂无矩阵数据</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <img
+                      src={matrixUrl}
+                      alt="Time×Source Matrix"
+                      className="min-w-full block"
+                      style={{ maxHeight: '400px', width: 'auto' }}
+                    />
+                  )}
+                </div>
               </div>
 
               {/* Info grid */}

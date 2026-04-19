@@ -13,7 +13,6 @@ import {
   Building2,
   TreePine,
 } from 'lucide-react'
-import GlassPanel from '@/components/GlassPanel'
 
 const TABS = [
   { id: 0, label: '玄女底座是什么', icon: Info },
@@ -79,7 +78,7 @@ export default function AboutSection() {
 
   const slideVariants = {
     enter: (dir: number) => ({
-      x: dir > 0 ? 120 : -120,
+      x: dir > 0 ? 180 : -180,
       opacity: 0,
     }),
     center: {
@@ -87,7 +86,7 @@ export default function AboutSection() {
       opacity: 1,
     },
     exit: (dir: number) => ({
-      x: dir > 0 ? -120 : 120,
+      x: dir > 0 ? -180 : 180,
       opacity: 0,
     }),
   }
@@ -96,14 +95,14 @@ export default function AboutSection() {
   const CurrentIcon = currentTab.icon
 
   return (
-    <section id="section-about" className="relative py-24 px-4 overflow-hidden">
-      <div className="w-full px-2 md:px-8">
+    <section id="section-about" className="relative py-24 overflow-hidden">
+      <div className="w-full px-4 md:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
-          className="mb-10"
+          className="mb-10 px-2 md:px-4"
         >
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
@@ -123,7 +122,7 @@ export default function AboutSection() {
           {/* Left arrow - absolute at screen edge */}
           <button
             onClick={goPrev}
-            className="absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full glass border border-slate-200/80 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-white/90 transition-all duration-300 shadow-sm"
+            className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full glass border border-slate-200/80 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-white/90 transition-all duration-300 shadow-sm"
             aria-label="上一个"
           >
             <ChevronLeft className="w-6 h-6" />
@@ -132,14 +131,14 @@ export default function AboutSection() {
           {/* Right arrow - absolute at screen edge */}
           <button
             onClick={goNext}
-            className="absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full glass border border-slate-200/80 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-white/90 transition-all duration-300 shadow-sm"
+            className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full glass border border-slate-200/80 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-white/90 transition-all duration-300 shadow-sm"
             aria-label="下一个"
           >
             <ChevronRight className="w-6 h-6" />
           </button>
 
           {/* Tab content with slide animation */}
-          <div className="relative mx-14 md:mx-16 overflow-hidden">
+          <div className="relative mx-14 md:mx-20 overflow-hidden">
             <AnimatePresence mode="wait" custom={direction}>
               {activeTab === 0 && (
                 <motion.div
@@ -149,50 +148,52 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ type: 'spring', damping: 30, stiffness: 200 }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
                 >
-                  <GlassPanel className="p-8 md:p-12">
-                    {/* Tab title shown inline */}
-                    <div className="flex items-center justify-center gap-2 mb-6">
+                  {/* Animated tab title — the ONLY title shown */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15, duration: 0.4 }}
+                    className="flex items-center justify-center gap-3 mb-10"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center">
                       <CurrentIcon className="w-5 h-5 text-sky-500" />
-                      <h3 className="text-xl md:text-2xl font-bold text-slate-700">
-                        {currentTab.label}
-                      </h3>
                     </div>
-                    <div className="max-w-4xl mx-auto text-center">
-                      <h3 className="text-2xl md:text-3xl font-bold text-slate-800 mb-6">
-                        玄女底座是什么？
-                      </h3>
-                      <p className="text-lg text-slate-600 leading-relaxed mb-8">
-                        玄女底座是一个面向遥感应用的<span className="text-sky-600 font-medium">预训练嵌入模型平台</span>。
-                        它基于多源异构遥感数据（光学、雷达、高程等）进行预训练，学习像素级的通用表征，
-                        并通过灵活的<span className="text-sky-600 font-medium">Task Head</span>架构支持多种下游监测任务。
-                      </p>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-                        <div className="bg-slate-50 rounded-xl p-5">
-                          <div className="w-10 h-10 rounded-lg bg-sky-500/10 flex items-center justify-center mb-3">
-                            <Layers className="w-5 h-5 text-sky-500" />
-                          </div>
-                          <h4 className="font-medium text-slate-700 mb-1">多源融合</h4>
-                          <p className="text-sm text-slate-500">整合 Sentinel-2、Sentinel-1、Landsat、高分影像等多种传感器数据</p>
-                        </div>
-                        <div className="bg-slate-50 rounded-xl p-5">
-                          <div className="w-10 h-10 rounded-lg bg-sky-500/10 flex items-center justify-center mb-3">
-                            <Zap className="w-5 h-5 text-sky-500" />
-                          </div>
-                          <h4 className="font-medium text-slate-700 mb-1">预训练表征</h4>
-                          <p className="text-sm text-slate-500">128维像素级稠密嵌入向量，捕捉地表特征的丰富语义信息</p>
-                        </div>
-                        <div className="bg-slate-50 rounded-xl p-5">
-                          <div className="w-10 h-10 rounded-lg bg-sky-500/10 flex items-center justify-center mb-3">
-                            <BarChart3 className="w-5 h-5 text-sky-500" />
-                          </div>
-                          <h4 className="font-medium text-slate-700 mb-1">灵活扩展</h4>
-                          <p className="text-sm text-slate-500">一个底座 + 多个 Task Head，按需接入不同下游任务</p>
-                        </div>
+                    <h3 className="text-2xl md:text-3xl font-bold text-slate-800">
+                      {currentTab.label}
+                    </h3>
+                  </motion.div>
+
+                  <p className="text-lg text-slate-600 leading-relaxed mb-10 text-center max-w-3xl mx-auto">
+                    玄女底座是一个面向遥感应用的<span className="text-sky-600 font-medium">预训练嵌入模型平台</span>。
+                    它基于多源异构遥感数据（光学、雷达、高程等）进行预训练，学习像素级的通用表征，
+                    并通过灵活的<span className="text-sky-600 font-medium">Task Head</span>架构支持多种下游监测任务。
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div className="rounded-xl border border-slate-200 bg-white/60 backdrop-blur-sm p-6 hover:shadow-md transition-shadow">
+                      <div className="w-10 h-10 rounded-lg bg-sky-500/10 flex items-center justify-center mb-3">
+                        <Layers className="w-5 h-5 text-sky-500" />
                       </div>
+                      <h4 className="font-medium text-slate-700 mb-1">多源融合</h4>
+                      <p className="text-sm text-slate-500">整合 Sentinel-2、Sentinel-1、Landsat、高分影像等多种传感器数据</p>
                     </div>
-                  </GlassPanel>
+                    <div className="rounded-xl border border-slate-200 bg-white/60 backdrop-blur-sm p-6 hover:shadow-md transition-shadow">
+                      <div className="w-10 h-10 rounded-lg bg-sky-500/10 flex items-center justify-center mb-3">
+                        <Zap className="w-5 h-5 text-sky-500" />
+                      </div>
+                      <h4 className="font-medium text-slate-700 mb-1">预训练表征</h4>
+                      <p className="text-sm text-slate-500">128维像素级稠密嵌入向量，捕捉地表特征的丰富语义信息</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white/60 backdrop-blur-sm p-6 hover:shadow-md transition-shadow">
+                      <div className="w-10 h-10 rounded-lg bg-sky-500/10 flex items-center justify-center mb-3">
+                        <BarChart3 className="w-5 h-5 text-sky-500" />
+                      </div>
+                      <h4 className="font-medium text-slate-700 mb-1">灵活扩展</h4>
+                      <p className="text-sm text-slate-500">一个底座 + 多个 Task Head，按需接入不同下游任务</p>
+                    </div>
+                  </div>
                 </motion.div>
               )}
 
@@ -204,51 +205,53 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ type: 'spring', damping: 30, stiffness: 200 }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
                 >
-                  <GlassPanel className="p-8 md:p-12">
-                    <div className="flex items-center justify-center gap-2 mb-6">
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15, duration: 0.4 }}
+                    className="flex items-center justify-center gap-3 mb-10"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center">
                       <CurrentIcon className="w-5 h-5 text-sky-500" />
-                      <h3 className="text-xl md:text-2xl font-bold text-slate-700">
-                        {currentTab.label}
-                      </h3>
                     </div>
-                    <div className="text-center mb-8">
-                      <h3 className="text-2xl md:text-3xl font-bold text-slate-800 mb-3">
-                        玄女底座能做什么？
-                      </h3>
-                      <p className="text-slate-500 max-w-xl mx-auto">
-                        基于"预训练底座 + 可插拔 Task Head"的架构，一次训练即可支持多种遥感监测任务
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
-                      {CAPABILITIES.map((cap) => {
-                        const Icon = cap.icon
-                        return (
+                    <h3 className="text-2xl md:text-3xl font-bold text-slate-800">
+                      {currentTab.label}
+                    </h3>
+                  </motion.div>
+
+                  <p className="text-slate-500 text-center mb-8 max-w-xl mx-auto">
+                    基于"预训练底座 + 可插拔 Task Head"的架构，一次训练即可支持多种遥感监测任务
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {CAPABILITIES.map((cap) => {
+                      const Icon = cap.icon
+                      return (
+                        <div
+                          key={cap.title}
+                          className="rounded-xl border border-slate-200 bg-white/60 backdrop-blur-sm p-5 hover:shadow-md transition-shadow"
+                        >
                           <div
-                            key={cap.title}
-                            className="rounded-xl border border-slate-200 bg-white p-5 hover:shadow-md transition-shadow"
+                            className="w-10 h-10 rounded-lg flex items-center justify-center mb-3"
+                            style={{ background: `${cap.color}12` }}
                           >
-                            <div
-                              className="w-10 h-10 rounded-lg flex items-center justify-center mb-3"
-                              style={{ background: `${cap.color}12` }}
-                            >
-                              <Icon className="w-5 h-5" style={{ color: cap.color }} />
-                            </div>
-                            <h4 className="font-medium text-slate-700 mb-1">{cap.title}</h4>
-                            <p className="text-sm text-slate-500">{cap.desc}</p>
+                            <Icon className="w-5 h-5" style={{ color: cap.color }} />
                           </div>
-                        )
-                      })}
-                    </div>
-                    <div className="mt-8 p-4 bg-sky-50 rounded-xl border border-sky-100 max-w-5xl mx-auto">
-                      <p className="text-sm text-sky-700 text-center">
-                        <span className="font-medium">架构优势：</span>
-                        预训练底座学习通用地表表征，Task Head 专注特定任务，
-                        新任务只需训练轻量级 Head，无需从头训练整个模型
-                      </p>
-                    </div>
-                  </GlassPanel>
+                          <h4 className="font-medium text-slate-700 mb-1">{cap.title}</h4>
+                          <p className="text-sm text-slate-500">{cap.desc}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-8 p-4 bg-sky-50 rounded-xl border border-sky-100 max-w-3xl mx-auto">
+                    <p className="text-sm text-sky-700 text-center">
+                      <span className="font-medium">架构优势：</span>
+                      预训练底座学习通用地表表征，Task Head 专注特定任务，
+                      新任务只需训练轻量级 Head，无需从头训练整个模型
+                    </p>
+                  </div>
                 </motion.div>
               )}
 
@@ -260,41 +263,43 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ type: 'spring', damping: 30, stiffness: 200 }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
                 >
-                  <GlassPanel className="p-8 md:p-12">
-                    <div className="flex items-center justify-center gap-2 mb-6">
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15, duration: 0.4 }}
+                    className="flex items-center justify-center gap-3 mb-10"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center">
                       <CurrentIcon className="w-5 h-5 text-sky-500" />
-                      <h3 className="text-xl md:text-2xl font-bold text-slate-700">
-                        {currentTab.label}
-                      </h3>
                     </div>
-                    <div className="text-center mb-8">
-                      <h3 className="text-2xl md:text-3xl font-bold text-slate-800 mb-3">
-                        效果如何？
-                      </h3>
-                      <p className="text-slate-500 max-w-xl mx-auto">
-                        在哈尔滨新区 424 个栅格上的训练与验证表现
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
-                      {METRICS.map((m) => (
-                        <div
-                          key={m.label}
-                          className="text-center p-5 rounded-xl bg-slate-50 border border-slate-100"
-                        >
-                          <div className="text-3xl font-bold text-sky-600 mb-1">
-                            {m.value}
-                            <span className="text-lg text-slate-400 ml-0.5">{m.unit}</span>
-                          </div>
-                          <div className="text-sm font-medium text-slate-700 mb-1">
-                            {m.label}
-                          </div>
-                          <div className="text-xs text-slate-400">{m.desc}</div>
+                    <h3 className="text-2xl md:text-3xl font-bold text-slate-800">
+                      {currentTab.label}
+                    </h3>
+                  </motion.div>
+
+                  <p className="text-slate-500 text-center mb-8 max-w-xl mx-auto">
+                    在哈尔滨新区 424 个栅格上的训练与验证表现
+                  </p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
+                    {METRICS.map((m) => (
+                      <div
+                        key={m.label}
+                        className="text-center p-5 rounded-xl bg-white/60 backdrop-blur-sm border border-slate-200"
+                      >
+                        <div className="text-3xl font-bold text-sky-600 mb-1">
+                          {m.value}
+                          <span className="text-lg text-slate-400 ml-0.5">{m.unit}</span>
                         </div>
-                      ))}
-                    </div>
-                  </GlassPanel>
+                        <div className="text-sm font-medium text-slate-700 mb-1">
+                          {m.label}
+                        </div>
+                        <div className="text-xs text-slate-400">{m.desc}</div>
+                      </div>
+                    ))}
+                  </div>
                 </motion.div>
               )}
 
@@ -306,85 +311,87 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ type: 'spring', damping: 30, stiffness: 200 }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
                 >
-                  <GlassPanel className="p-8 md:p-12">
-                    <div className="flex items-center justify-center gap-2 mb-6">
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15, duration: 0.4 }}
+                    className="flex items-center justify-center gap-3 mb-10"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center">
                       <CurrentIcon className="w-5 h-5 text-sky-500" />
-                      <h3 className="text-xl md:text-2xl font-bold text-slate-700">
-                        {currentTab.label}
-                      </h3>
                     </div>
-                    <div className="text-center mb-6">
-                      <h3 className="text-2xl md:text-3xl font-bold text-slate-800 mb-3">
-                        嵌入数据集展示
-                      </h3>
-                      <p className="text-slate-500 max-w-xl mx-auto">
-                        哈尔滨新区 424 个栅格的空间分布与覆盖范围
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-                      <div className="rounded-xl bg-slate-50 border border-slate-200 p-6">
-                        <h4 className="font-medium text-slate-700 mb-4">空间覆盖</h4>
-                        <div className="space-y-3 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">区域</span>
-                            <span className="text-slate-700">哈尔滨新区</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">坐标系</span>
-                            <span className="text-slate-700 font-mono">EPSG:32652</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">栅格数量</span>
-                            <span className="text-slate-700 font-mono">424</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">网格尺寸</span>
-                            <span className="text-slate-700 font-mono">26 × 24</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">单栅格尺寸</span>
-                            <span className="text-slate-700 font-mono">1280m × 1280m</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">空间分辨率</span>
-                            <span className="text-slate-700 font-mono">10m</span>
-                          </div>
+                    <h3 className="text-2xl md:text-3xl font-bold text-slate-800">
+                      {currentTab.label}
+                    </h3>
+                  </motion.div>
+
+                  <p className="text-slate-500 text-center mb-6 max-w-xl mx-auto">
+                    哈尔滨新区 424 个栅格的空间分布与覆盖范围
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="rounded-xl bg-white/60 backdrop-blur-sm border border-slate-200 p-6">
+                      <h4 className="font-medium text-slate-700 mb-4">空间覆盖</h4>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">区域</span>
+                          <span className="text-slate-700">哈尔滨新区</span>
                         </div>
-                      </div>
-                      <div className="rounded-xl bg-slate-50 border border-slate-200 p-6">
-                        <h4 className="font-medium text-slate-700 mb-4">数据构成</h4>
-                        <div className="space-y-3 text-sm">
-                          {[
-                            { name: 'Sentinel-2 光学影像', count: '182 帧' },
-                            { name: 'Sentinel-1 SAR影像', count: '100 帧' },
-                            { name: 'Landsat 光学影像', count: '38-54 帧' },
-                            { name: '高分光学影像', count: '5 帧' },
-                            { name: '高分雷达影像', count: '4 帧' },
-                            { name: 'DEM 高程数据', count: '1 帧' },
-                          ].map((item) => (
-                            <div key={item.name} className="flex justify-between">
-                              <span className="text-slate-500">{item.name}</span>
-                              <span className="text-slate-700 font-mono">{item.count}</span>
-                            </div>
-                          ))}
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">坐标系</span>
+                          <span className="text-slate-700 font-mono">EPSG:32652</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">栅格数量</span>
+                          <span className="text-slate-700 font-mono">424</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">网格尺寸</span>
+                          <span className="text-slate-700 font-mono">26 × 24</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">单栅格尺寸</span>
+                          <span className="text-slate-700 font-mono">1280m × 1280m</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">空间分辨率</span>
+                          <span className="text-slate-700 font-mono">10m</span>
                         </div>
                       </div>
                     </div>
-                    <div className="mt-6 p-4 bg-sky-50 rounded-xl border border-sky-100 text-center max-w-5xl mx-auto">
-                      <p className="text-sm text-sky-700">
-                        时间范围：2023-01 至 2025-10，覆盖多季节、多年份的时序遥感数据
-                      </p>
+                    <div className="rounded-xl bg-white/60 backdrop-blur-sm border border-slate-200 p-6">
+                      <h4 className="font-medium text-slate-700 mb-4">数据构成</h4>
+                      <div className="space-y-3 text-sm">
+                        {[
+                          { name: 'Sentinel-2 光学影像', count: '182 帧' },
+                          { name: 'Sentinel-1 SAR影像', count: '100 帧' },
+                          { name: 'Landsat 光学影像', count: '38-54 帧' },
+                          { name: '高分光学影像', count: '5 帧' },
+                          { name: '高分雷达影像', count: '4 帧' },
+                          { name: 'DEM 高程数据', count: '1 帧' },
+                        ].map((item) => (
+                          <div key={item.name} className="flex justify-between">
+                            <span className="text-slate-500">{item.name}</span>
+                            <span className="text-slate-700 font-mono">{item.count}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </GlassPanel>
+                  </div>
+                  <div className="mt-6 p-4 bg-sky-50 rounded-xl border border-sky-100 text-center max-w-3xl mx-auto">
+                    <p className="text-sm text-sky-700">
+                      时间范围：2023-01 至 2025-10，覆盖多季节、多年份的时序遥感数据
+                    </p>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
           {/* Dot indicators */}
-          <div className="flex justify-center gap-2 mt-6">
+          <div className="flex justify-center gap-2 mt-8">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
