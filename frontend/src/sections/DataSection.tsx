@@ -6,6 +6,7 @@ import {
   TileLayer,
   Rectangle,
   Popup,
+  useMap,
   useMapEvent,
 } from 'react-leaflet'
 import type { LatLngBoundsLiteral } from 'leaflet'
@@ -28,6 +29,16 @@ function MapClickHandler({
   onMapClick: () => void
 }) {
   useMapEvent('click', onMapClick)
+  return null
+}
+
+function MapFitBounds({ bounds }: { bounds: LatLngBoundsLiteral }) {
+  const map = useMap()
+  useEffect(() => {
+    if (bounds.length > 0) {
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 })
+    }
+  }, [map, bounds])
   return null
 }
 
@@ -63,17 +74,17 @@ export default function DataSection() {
       .finally(() => setLoading(false))
   }, [])
 
-  const mapCenter: [number, number] = useMemo(() => {
-    if (patches.length === 0) return [45.8, 126.55]
+  const allBounds: LatLngBoundsLiteral = useMemo(() => {
+    if (patches.length === 0) return [[45.8, 126.55], [45.8, 126.55]]
     let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180
     for (const p of patches) {
-      const [, bMinLat, , bMaxLat] = p.bounds_wgs84
-      minLat = Math.min(minLat, bMinLat)
-      maxLat = Math.max(maxLat, bMaxLat)
-      minLon = Math.min(minLon, p.bounds_wgs84[0])
-      maxLon = Math.max(maxLon, p.bounds_wgs84[2])
+      const [w, s, e, n] = p.bounds_wgs84
+      minLat = Math.min(minLat, s)
+      maxLat = Math.max(maxLat, n)
+      minLon = Math.min(minLon, w)
+      maxLon = Math.max(maxLon, e)
     }
-    return [(minLat + maxLat) / 2, (minLon + maxLon) / 2]
+    return [[minLat, minLon], [maxLat, maxLon]]
   }, [patches])
 
   const patchBounds = useCallback(
@@ -202,8 +213,7 @@ export default function DataSection() {
             ) : (
               <div className="h-[500px] lg:h-[600px]">
                 <MapContainer
-                  center={mapCenter}
-                  zoom={13}
+                  bounds={allBounds}
                   scrollWheelZoom={true}
                   style={{ height: '100%', width: '100%' }}
                 >
@@ -211,6 +221,7 @@ export default function DataSection() {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
+                  <MapFitBounds bounds={allBounds} />
                   <MapClickHandler onMapClick={handleMapClick} />
                   {patches.map((patch) => {
                     const isPreview = previewPatch?.patch_id === patch.patch_id

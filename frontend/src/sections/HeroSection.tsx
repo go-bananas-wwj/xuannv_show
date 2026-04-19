@@ -35,7 +35,7 @@ export default function HeroSection({ onExplore }: HeroSectionProps) {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-white text-sm mb-10 border-glow"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-sky-500/90 backdrop-blur-sm text-white text-sm mb-10 border border-sky-400/50 shadow-lg shadow-sky-500/20"
         >
           <Satellite className="w-4 h-4" />
           <span>面向遥感应用的AI数据底座</span>

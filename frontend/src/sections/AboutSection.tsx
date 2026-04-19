@@ -78,7 +78,7 @@ export default function AboutSection() {
 
   const slideVariants = {
     enter: (dir: number) => ({
-      x: dir > 0 ? 180 : -180,
+      x: dir > 0 ? 80 : -80,
       opacity: 0,
     }),
     center: {
@@ -86,7 +86,7 @@ export default function AboutSection() {
       opacity: 1,
     },
     exit: (dir: number) => ({
-      x: dir > 0 ? -180 : 180,
+      x: dir > 0 ? -80 : 80,
       opacity: 0,
     }),
   }
@@ -115,7 +115,7 @@ export default function AboutSection() {
         </motion.div>
 
         {/* Full-width carousel container */}
-        <div className="relative min-h-[520px] md:min-h-[560px]">
+        <div className="relative min-h-[580px] md:min-h-[620px]">
           {/* Left arrow - absolute at screen edge */}
           <button
             onClick={goPrev}
@@ -145,7 +145,7 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
+                  transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
                 >
                   {/* Animated tab title — the ONLY title shown */}
                   <motion.div
@@ -202,7 +202,7 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
+                  transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
                 >
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
@@ -260,7 +260,7 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
+                  transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
                 >
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
@@ -308,7 +308,7 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
+                  transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
                 >
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}

@@ -21,7 +21,10 @@ function App() {
   }
 
   return (
-    <div className="min-h-dvh bg-slate-50 text-slate-800 overflow-x-hidden">
+    <div
+      className="h-dvh bg-slate-50 text-slate-800 overflow-x-hidden overflow-y-auto scroll-smooth"
+      style={{ scrollSnapType: 'y mandatory' }}
+    >
       <Navigation
         onNavigate={(section) => {
           if (section === 'intro') scrollTo(introRef)
@@ -35,6 +38,7 @@ function App() {
 
       <motion.div
         ref={introRef}
+        className="snap-start"
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true, margin: '-100px' }}
@@ -45,6 +49,7 @@ function App() {
 
       <motion.div
         ref={aboutRef}
+        className="snap-start"
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true, margin: '-100px' }}
@@ -55,6 +60,7 @@ function App() {
 
       <motion.div
         ref={dataRef}
+        className="snap-start"
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true, margin: '-100px' }}
@@ -65,6 +71,7 @@ function App() {
 
       <motion.div
         ref={downstreamRef}
+        className="snap-start"
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true, margin: '-100px' }}
@@ -75,6 +82,7 @@ function App() {
 
       <motion.div
         ref={agentRef}
+        className="snap-start"
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true, margin: '-100px' }}
@@ -85,6 +93,7 @@ function App() {
 
       <motion.div
         ref={contactRef}
+        className="snap-start"
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true, margin: '-100px' }}
@@ -93,7 +102,7 @@ function App() {
         <ContactSection />
       </motion.div>
 
-      <footer className="py-8 text-center text-sm text-slate-400 border-t border-slate-200">
+      <footer className="snap-start py-8 text-center text-sm text-slate-400 border-t border-slate-200">
         <p>玄女底座 Visualization Platform</p>
       </footer>
     </div>
