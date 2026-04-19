@@ -53,7 +53,7 @@ export default function ContactSection() {
 
             <div className="mt-8 pt-6 border-t border-slate-100 text-center">
               <p className="text-sm text-slate-400">
-                中国科学院大学 · 遥感与数字地球研究所
+                中国科学院大学
               </p>
             </div>
           </GlassPanel>

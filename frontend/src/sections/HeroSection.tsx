@@ -37,7 +37,7 @@ export default function HeroSection({ onExplore }: HeroSectionProps) {
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sky-600 text-sm mb-10 border-glow"
         >
           <Satellite className="w-4 h-4" />
-          <span>面向遥感引用的AI数据底座</span>
+          <span>面向遥感应用的AI数据底座</span>
         </motion.div>
 
         <motion.h1

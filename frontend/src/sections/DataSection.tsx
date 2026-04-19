@@ -10,7 +10,6 @@ import {
 } from 'react-leaflet'
 import type { LatLngBoundsLiteral } from 'leaflet'
 import PatchDetailPanel from '@/components/PatchDetailPanel'
-import DataSourceSwitcher from '@/components/DataSourceSwitcher'
 import GlassPanel from '@/components/GlassPanel'
 
 interface PatchOverlay {
@@ -32,12 +31,15 @@ function MapClickHandler({
   return null
 }
 
+function formatPatchId(patchId: string): string {
+  const num = patchId.replace(/^patch_0*/, '')
+  return `${num}号栅格`
+}
+
 export default function DataSection() {
-  const [dataSource, setDataSource] = useState<'monthly' | 'embedding'>('monthly')
   const [patches, setPatches] = useState<PatchOverlay[]>([])
   const [selectedPatch, setSelectedPatch] = useState<PatchOverlay | null>(null)
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('')
 
   useEffect(() => {
     fetch('/data/patches_meta.json')
@@ -84,12 +86,6 @@ export default function DataSection() {
     []
   )
 
-  const filteredPatches = filter
-    ? patches.filter((p) =>
-        p.patch_id.toLowerCase().includes(filter.toLowerCase())
-      )
-    : patches
-
   return (
     <section id="section-data" className="relative py-24 px-4">
       <div className="max-w-7xl mx-auto">
@@ -109,52 +105,13 @@ export default function DataSection() {
             </h2>
           </div>
           <p className="text-slate-500 max-w-2xl">
-            交互式地图展示训练数据覆盖区域，点击 Patch 矩形查看详情与 Embedding 预览
+            交互式地图展示训练数据覆盖区域，点击栅格矩形查看详情与嵌入预览
           </p>
         </motion.div>
 
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Sidebar */}
-          <div className="lg:w-72 space-y-4 shrink-0">
-            <GlassPanel className="p-5">
-              <h3 className="font-medium text-slate-700 mb-4">Patch 选择器</h3>
-              <input
-                type="text"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder="搜索 Patch ID..."
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300 mb-3"
-              />
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {filteredPatches.slice(0, 50).map((p) => (
-                  <button
-                    key={p.patch_id}
-                    onClick={() => setSelectedPatch(p)}
-                    className={`w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors ${
-                      selectedPatch?.patch_id === p.patch_id
-                        ? 'bg-sky-50 text-sky-700'
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="font-mono">{p.patch_id}</span>
-                    <span className="text-xs text-slate-400 ml-2">
-                      {Object.keys(p.sources).length} sources
-                    </span>
-                  </button>
-                ))}
-                {filteredPatches.length > 50 && (
-                  <p className="text-xs text-slate-400 px-3 py-1">
-                    ...还有 {filteredPatches.length - 50} 个
-                  </p>
-                )}
-              </div>
-            </GlassPanel>
-
-            <GlassPanel className="p-5">
-              <h3 className="font-medium text-slate-700 mb-4">数据源切换</h3>
-              <DataSourceSwitcher value={dataSource} onChange={setDataSource} />
-            </GlassPanel>
-
+          {/* Sidebar - 仅保留区域信息 */}
+          <div className="lg:w-64 space-y-4 shrink-0">
             <GlassPanel className="p-5">
               <h3 className="font-medium text-slate-700 mb-4 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-amber-500" />
@@ -176,20 +133,6 @@ export default function DataSection() {
                 <div className="flex justify-between">
                   <span className="text-slate-500">时间范围</span>
                   <span className="text-slate-700 text-xs">2023-01 ~ 2025-10</span>
-                </div>
-              </div>
-            </GlassPanel>
-
-            <GlassPanel className="p-4">
-              <h4 className="text-xs font-medium text-slate-500 mb-2">图例</h4>
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded border border-sky-500 bg-sky-500/20" />
-                  <span className="text-slate-600">Patch 区域</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded border-2 border-amber-500 bg-amber-500/30" />
-                  <span className="text-slate-600">选中 Patch</span>
                 </div>
               </div>
             </GlassPanel>
@@ -235,8 +178,8 @@ export default function DataSection() {
                       >
                         <Popup>
                           <div className="text-sm">
-                            <p className="font-mono font-medium text-slate-800">
-                              {patch.patch_id}
+                            <p className="font-medium text-slate-800">
+                              {formatPatchId(patch.patch_id)}
                             </p>
                             <p className="text-xs text-slate-500 mt-1">
                               {Object.keys(patch.sources).length} 种传感器
