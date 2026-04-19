@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { LayoutGrid, MapPin, Eye } from 'lucide-react'
+import { LayoutGrid, MapPin, Eye, Database } from 'lucide-react'
 import {
   MapContainer,
   TileLayer,
@@ -38,7 +38,8 @@ function formatPatchId(patchId: string): string {
 
 export default function DataSection() {
   const [patches, setPatches] = useState<PatchOverlay[]>([])
-  const [selectedPatch, setSelectedPatch] = useState<PatchOverlay | null>(null)
+  const [previewPatch, setPreviewPatch] = useState<PatchOverlay | null>(null)
+  const [detailPatch, setDetailPatch] = useState<PatchOverlay | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -86,6 +87,16 @@ export default function DataSection() {
     []
   )
 
+  const handleMapClick = () => {
+    setPreviewPatch(null)
+    setDetailPatch(null)
+  }
+
+  const handlePatchClick = (patch: PatchOverlay) => {
+    setPreviewPatch(patch)
+    setDetailPatch(null)
+  }
+
   return (
     <section id="section-data" className="relative py-24 px-4">
       <div className="max-w-7xl mx-auto">
@@ -110,8 +121,9 @@ export default function DataSection() {
         </motion.div>
 
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Sidebar - 仅保留区域信息 */}
+          {/* Sidebar */}
           <div className="lg:w-64 space-y-4 shrink-0">
+            {/* Region info */}
             <GlassPanel className="p-5">
               <h3 className="font-medium text-slate-700 mb-4 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-amber-500" />
@@ -136,6 +148,49 @@ export default function DataSection() {
                 </div>
               </div>
             </GlassPanel>
+
+            {/* Selected patch preview */}
+            {previewPatch && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <GlassPanel className="p-5 border-sky-200">
+                  <h3 className="font-medium text-slate-700 mb-3 flex items-center gap-2">
+                    <Database className="w-4 h-4 text-sky-500" />
+                    当前栅格
+                  </h3>
+                  <div className="space-y-2 text-sm mb-4">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">编号</span>
+                      <span className="text-slate-700 font-medium">
+                        {formatPatchId(previewPatch.patch_id)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">传感器</span>
+                      <span className="text-slate-700 font-mono">
+                        {Object.keys(previewPatch.sources).length} 种
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">时间</span>
+                      <span className="text-slate-700 text-xs">
+                        {previewPatch.time_range[0]} ~ {previewPatch.time_range[1]}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setDetailPatch(previewPatch)}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-sky-500 text-white hover:bg-sky-600 transition-colors text-sm font-medium"
+                  >
+                    <Eye className="w-4 h-4" />
+                    查看数据
+                  </button>
+                </GlassPanel>
+              </motion.div>
+            )}
           </div>
 
           {/* Map */}
@@ -156,23 +211,23 @@ export default function DataSection() {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
-                  <MapClickHandler onMapClick={() => setSelectedPatch(null)} />
+                  <MapClickHandler onMapClick={handleMapClick} />
                   {patches.map((patch) => {
-                    const isSelected = selectedPatch?.patch_id === patch.patch_id
+                    const isPreview = previewPatch?.patch_id === patch.patch_id
                     return (
                       <Rectangle
                         key={patch.patch_id}
                         bounds={patchBounds(patch)}
                         pathOptions={{
-                          color: isSelected ? '#f59e0b' : '#0ea5e9',
-                          weight: isSelected ? 2.5 : 1,
-                          fillColor: isSelected ? '#f59e0b' : '#0ea5e9',
-                          fillOpacity: isSelected ? 0.35 : 0.12,
+                          color: isPreview ? '#f59e0b' : '#0ea5e9',
+                          weight: isPreview ? 2.5 : 1,
+                          fillColor: isPreview ? '#f59e0b' : '#0ea5e9',
+                          fillOpacity: isPreview ? 0.35 : 0.12,
                         }}
                         eventHandlers={{
                           click: (e) => {
                             e.originalEvent.stopPropagation()
-                            setSelectedPatch(patch)
+                            handlePatchClick(patch)
                           },
                         }}
                       >
@@ -185,7 +240,7 @@ export default function DataSection() {
                               {Object.keys(patch.sources).length} 种传感器
                             </p>
                             <button
-                              onClick={() => setSelectedPatch(patch)}
+                              onClick={() => handlePatchClick(patch)}
                               className="mt-2 flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700"
                             >
                               <Eye className="w-3 h-3" />
@@ -204,8 +259,8 @@ export default function DataSection() {
       </div>
 
       <PatchDetailPanel
-        patch={selectedPatch as any}
-        onClose={() => setSelectedPatch(null)}
+        patch={detailPatch as any}
+        onClose={() => setDetailPatch(null)}
       />
     </section>
   )

@@ -112,9 +112,6 @@ export default function AboutSection() {
               平台介绍
             </h2>
           </div>
-          <p className="text-slate-500 max-w-2xl">
-            了解玄女底座的核心能力、应用场景与数据覆盖范围
-          </p>
         </motion.div>
 
         {/* Full-width carousel container */}
@@ -390,8 +387,8 @@ export default function AboutSection() {
             </AnimatePresence>
           </div>
 
-          {/* Dot indicators */}
-          <div className="flex justify-center gap-2 mt-8">
+          {/* Dot indicators — fixed at bottom, won't move with content */}
+          <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-2">
             {TABS.map((tab) => (
               <button
                 key={tab.id}

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, MapPin, Calendar, Database, Image as ImageIcon } from 'lucide-react'
+import { X, MapPin, Calendar, Database, AlertCircle } from 'lucide-react'
 
 interface PatchDetail {
   patch_id: string
@@ -37,36 +37,51 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
   const [matrixUrl, setMatrixUrl] = useState<string | null>(null)
   const [matrixLoading, setMatrixLoading] = useState(false)
   const [matrixError, setMatrixError] = useState(false)
+  const [imgLoaded, setImgLoaded] = useState(false)
+  const matrixUrlRef = useRef<string | null>(null)
 
   // Fetch Time×Source Matrix when patch changes
   useEffect(() => {
     if (!patch) {
+      if (matrixUrlRef.current) {
+        URL.revokeObjectURL(matrixUrlRef.current)
+        matrixUrlRef.current = null
+      }
       setMatrixUrl(null)
       setMatrixError(false)
+      setImgLoaded(false)
       return
     }
 
     setMatrixLoading(true)
     setMatrixError(false)
+    setImgLoaded(false)
 
     fetch(`/api/patches/${patch.patch_id}/matrix`)
       .then((res) => {
-        if (!res.ok) throw new Error('Matrix not available')
+        if (!res.ok) throw new Error(`Matrix not available: ${res.status}`)
         return res.blob()
       })
       .then((blob) => {
         const url = URL.createObjectURL(blob)
+        // Revoke previous URL before setting new one
+        if (matrixUrlRef.current) {
+          URL.revokeObjectURL(matrixUrlRef.current)
+        }
+        matrixUrlRef.current = url
         setMatrixUrl(url)
         setMatrixLoading(false)
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('Matrix fetch failed:', err)
         setMatrixError(true)
         setMatrixLoading(false)
       })
 
     return () => {
-      if (matrixUrl) {
-        URL.revokeObjectURL(matrixUrl)
+      if (matrixUrlRef.current) {
+        URL.revokeObjectURL(matrixUrlRef.current)
+        matrixUrlRef.current = null
       }
     }
   }, [patch?.patch_id])
@@ -122,23 +137,32 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
                 </p>
                 <div className="w-full overflow-x-auto rounded-xl border border-slate-200 bg-white">
                   {matrixLoading ? (
-                    <div className="flex items-center justify-center h-48">
+                    <div className="flex flex-col items-center justify-center h-48 gap-3">
                       <div className="w-8 h-8 border-2 border-sky-300 border-t-sky-500 rounded-full animate-spin" />
+                      <p className="text-sm text-slate-400">正在渲染矩阵图...</p>
                     </div>
                   ) : matrixError || !matrixUrl ? (
-                    <div className="flex items-center justify-center h-48 text-slate-400">
-                      <div className="text-center">
-                        <ImageIcon className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">暂无矩阵数据</p>
-                      </div>
+                    <div className="flex flex-col items-center justify-center h-48 gap-2 text-slate-400">
+                      <AlertCircle className="w-10 h-10 opacity-50" />
+                      <p className="text-sm">矩阵图加载失败</p>
+                      <p className="text-xs text-slate-400">请检查后端服务是否已启动</p>
                     </div>
                   ) : (
-                    <img
-                      src={matrixUrl}
-                      alt="Time×Source Matrix"
-                      className="min-w-full block"
-                      style={{ maxHeight: '400px', width: 'auto' }}
-                    />
+                    <div className="relative">
+                      {!imgLoaded && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+                          <div className="w-8 h-8 border-2 border-sky-300 border-t-sky-500 rounded-full animate-spin" />
+                        </div>
+                      )}
+                      <img
+                        src={matrixUrl}
+                        alt="Time×Source Matrix"
+                        className="min-w-full block"
+                        style={{ maxHeight: '400px', width: 'auto' }}
+                        onLoad={() => setImgLoaded(true)}
+                        onError={() => setMatrixError(true)}
+                      />
+                    </div>
                   )}
                 </div>
               </div>
