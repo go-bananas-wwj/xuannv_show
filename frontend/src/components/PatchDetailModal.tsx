@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Calendar, MapPin, BarChart3 } from 'lucide-react'
+import config from '@/config.json'
 
 interface PatchDetailModalProps {
   isOpen: boolean
@@ -130,29 +131,8 @@ export default function PatchDetailModal({
                     alt={`${patchId} detail`}
                     className="w-full rounded-lg"
                   />
-                  {/* 图例说明 — 5列标签 */}
-                  <div className="flex items-center justify-center gap-3 text-xs text-slate-500 flex-wrap">
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
-                      <div className="w-3 h-3 rounded bg-slate-300" />
-                      <span>前期 S2</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
-                      <div className="w-3 h-3 rounded bg-slate-400" />
-                      <span>后期 S2</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
-                      <div className="w-3 h-3 rounded bg-indigo-300" />
-                      <span>变化前嵌入</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
-                      <div className="w-3 h-3 rounded bg-indigo-400" />
-                      <span>变化后嵌入</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
-                      <div className="w-3 h-3 rounded bg-gradient-to-r from-blue-400 to-red-500" />
-                      <span>变化概率</span>
-                    </div>
-                  </div>
+                  {/* 图例说明 */}
+                  <LegendBar headId={headId} />
                 </div>
               ) : null}
             </div>
@@ -169,4 +149,53 @@ function formatPeriod(period: string): string {
     return `${before} vs ${after}`
   }
   return period
+}
+
+function LegendBar({ headId }: { headId: string }) {
+  if (headId === 'change_detection') {
+    return (
+      <div className="flex items-center justify-center gap-3 text-xs text-slate-500 flex-wrap">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+          <div className="w-3 h-3 rounded bg-slate-300" />
+          <span>前期 S2</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+          <div className="w-3 h-3 rounded bg-slate-400" />
+          <span>后期 S2</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+          <div className="w-3 h-3 rounded bg-indigo-300" />
+          <span>变化前嵌入</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+          <div className="w-3 h-3 rounded bg-indigo-400" />
+          <span>变化后嵌入</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+          <div className="w-3 h-3 rounded bg-gradient-to-r from-blue-400 to-red-500" />
+          <span>变化概率</span>
+        </div>
+      </div>
+    )
+  }
+
+  const legend = (config.legends as Record<string, { label: string; color: string }[]>)[headId]
+  if (!legend) return null
+
+  return (
+    <div className="flex items-center justify-center gap-2 text-xs text-slate-500 flex-wrap">
+      {legend.map((item) => (
+        <div
+          key={item.label}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100"
+        >
+          <div
+            className="w-3 h-3 rounded"
+            style={{ backgroundColor: item.color }}
+          />
+          <span>{item.label}</span>
+        </div>
+      ))}
+    </div>
+  )
 }

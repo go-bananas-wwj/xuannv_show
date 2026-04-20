@@ -63,5 +63,39 @@
     "Landsat": "Landsat 8/9",
     "S2-HR": "高分光学",
     "S1-HR": "高分雷达"
+  },
+  "legends": {
+    "worldcover": [
+      {"label": "森林", "color": "#419bdf"},
+      {"label": "灌木", "color": "#397d49"},
+      {"label": "草地", "color": "#88b053"},
+      {"label": "农田", "color": "#ffbb22"},
+      {"label": "建筑", "color": "#ffff4c"},
+      {"label": "裸地", "color": "#bb551d"},
+      {"label": "冰雪", "color": "#dedede"},
+      {"label": "水体", "color": "#aaaaaa"},
+      {"label": "湿地", "color": "#785014"},
+      {"label": "红树林", "color": "#8c8c8c"},
+      {"label": "苔藓", "color": "#646464"}
+    ],
+    "dynamic_world": [
+      {"label": "水体", "color": "#0064c8"},
+      {"label": "森林", "color": "#006400"},
+      {"label": "草地", "color": "#88b053"},
+      {"label": "水淹植被", "color": "#78b4a0"},
+      {"label": "农田", "color": "#ffbb22"},
+      {"label": "灌木/灌丛", "color": "#ff9632"},
+      {"label": "建筑", "color": "#fa0000"},
+      {"label": "裸地", "color": "#b4b4b4"},
+      {"label": "冰雪", "color": "#dedede"}
+    ],
+    "jrc_water": [
+      {"label": "非水体", "color": "#b4b4b4"},
+      {"label": "水体", "color": "#0064c8"}
+    ],
+    "building_extraction": [
+      {"label": "非建筑", "color": "#646464"},
+      {"label": "建筑", "color": "#fa0000"}
+    ]
   }
 }

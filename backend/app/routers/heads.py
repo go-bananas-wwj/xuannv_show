@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.services.data_loader import data_loader
 from app.services.task_engine import get_cd_engine
+from app.services.segmentation_engine import get_seg_engine
 
 router = APIRouter(prefix="/heads", tags=["heads"])
 
@@ -93,6 +94,15 @@ def _render_detail_cached(patch_id: str, period: str) -> bytes:
     return buf.getvalue()
 
 
+@functools.lru_cache(maxsize=128)
+def _render_seg_detail_cached(head_id: str, patch_id: str, month: str) -> bytes:
+    """缓存分类任务的 detail 图 PNG bytes."""
+    img = get_seg_engine().render_detail_figure(head_id, patch_id, month, panel_size=256)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 @router.get("/{head_id}/patch/{patch_id}/detail", response_model=None)
 async def get_patch_detail(
     head_id: str,
@@ -110,24 +120,38 @@ async def get_patch_detail(
     if not _VALID_PERIOD_RE.match(period):
         raise HTTPException(status_code=400, detail="Invalid period format")
 
-    if head_id != "change_detection":
-        raise HTTPException(status_code=404, detail=f"Detail not available for head={head_id}")
+    if head_id == "change_detection":
+        # 变化检测：双期 period="YYYY-MM_vs_YYYY-MM"
+        if "_vs_" not in period:
+            raise HTTPException(status_code=400, detail="Invalid period format, expected 'YYYY-MM_vs_YYYY-MM'")
+        try:
+            png_bytes = _render_detail_cached(patch_id, period)
+            return Response(content=png_bytes, media_type="image/png")
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            path = RESULTS_DIR / head_id / "detail" / f"{patch_id}_{period}.png"
+            if path.exists():
+                return FileResponse(path, media_type="image/png")
+            raise HTTPException(status_code=500, detail=f"Failed to render detail: {e}")
+    else:
+        # 分类任务：单期 period="YYYY-MM"
+        try:
+            png_bytes = _render_seg_detail_cached(head_id, patch_id, period)
+            return Response(content=png_bytes, media_type="image/png")
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to render detail: {e}")
 
-    if "_vs_" not in period:
-        raise HTTPException(status_code=400, detail="Invalid period format, expected 'YYYY-MM_vs_YYYY-MM'")
 
-    # 1. 尝试内存缓存
-    try:
-        png_bytes = _render_detail_cached(patch_id, period)
-        return Response(content=png_bytes, media_type="image/png")
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        # 缓存渲染失败，尝试回退到预计算文件
-        path = RESULTS_DIR / head_id / "detail" / f"{patch_id}_{period}.png"
-        if path.exists():
-            return FileResponse(path, media_type="image/png")
-        raise HTTPException(status_code=500, detail=f"Failed to render detail: {e}")
+@functools.lru_cache(maxsize=256)
+def _render_seg_tile_cached(head_id: str, patch_id: str, month: str) -> bytes:
+    """缓存分类任务的 tile 渲染结果."""
+    img = get_seg_engine().render_mosaic_tile(head_id, patch_id, month, size=128)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 @router.get("/{head_id}/patch/{patch_id}/tile", response_model=None)
@@ -144,16 +168,24 @@ async def get_patch_tile(
     if not _VALID_PERIOD_RE.match(period):
         raise HTTPException(status_code=400, detail="Invalid period format")
 
-    if head_id != "change_detection":
-        raise HTTPException(status_code=404, detail=f"Tile not available for head={head_id}")
-
-    path = RESULTS_DIR / head_id / "tiles" / f"{patch_id}_{period}.png"
-    if not path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Tile for {patch_id} period={period} not found",
-        )
-    return FileResponse(path, media_type="image/png")
+    if head_id == "change_detection":
+        # 变化检测：读取预计算文件
+        path = RESULTS_DIR / head_id / "tiles" / f"{patch_id}_{period}.png"
+        if not path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Tile for {patch_id} period={period} not found",
+            )
+        return FileResponse(path, media_type="image/png")
+    else:
+        # 分类任务：动态生成（period 是单月份，如 "2025-04"）
+        try:
+            png_bytes = _render_seg_tile_cached(head_id, patch_id, period)
+            return Response(content=png_bytes, media_type="image/png")
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to render tile: {e}")
 
 
 @router.get("/{head_id}/available-months")

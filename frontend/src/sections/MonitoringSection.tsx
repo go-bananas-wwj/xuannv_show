@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Waves, Play, ImageOff, Lock } from 'lucide-react'
+import { Waves, Play } from 'lucide-react'
 import TaskHeadSelector from '@/components/TaskHeadSelector'
 import GlassPanel from '@/components/GlassPanel'
 import MosaicViewer from '@/components/MosaicViewer'
@@ -26,7 +26,6 @@ export default function MonitoringSection() {
 
   const selectedHead = heads.find((h) => h.id === activeHead)
   const isChangeDetection = selectedHead?.is_change_detection ?? false
-  const isAvailable = activeHead === 'change_detection'
 
   // 加载 patches 元数据
   useEffect(() => {
@@ -44,11 +43,10 @@ export default function MonitoringSection() {
     fetch(`/api/heads/${activeHead}/available-months`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.periods) {
-          setAvailablePeriods(data.periods)
-          if (data.periods.length > 0 && !data.periods.find((p: any) => p.value === selectedPeriod)) {
-            setSelectedPeriod(data.periods[0].value)
-          }
+        const periods = data.periods || data.months || []
+        setAvailablePeriods(periods)
+        if (periods.length > 0 && !periods.find((p: any) => p.value === selectedPeriod)) {
+          setSelectedPeriod(periods[0].value)
         }
       })
       .catch((err) => console.error('Failed to load periods:', err))
@@ -115,42 +113,23 @@ export default function MonitoringSection() {
                     </div>
                     <p className="text-sm text-slate-500">{selectedHead.description}</p>
 
-                    {/* 不可用提示 */}
-                    {!isAvailable && (
-                      <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm">
-                        <Lock className="w-4 h-4 shrink-0" />
-                        <span>该任务模型训练中，敬请期待</span>
-                      </div>
-                    )}
-
                     <div className="pt-2 border-t border-slate-100 space-y-3">
-                      {isChangeDetection ? (
-                        <div>
-                          <label className="block text-sm text-slate-500 mb-1.5">时间范围</label>
-                          <select
-                            value={selectedPeriod}
-                            onChange={(e) => setSelectedPeriod(e.target.value)}
-                            disabled={!isAvailable}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300 disabled:opacity-50 disabled:bg-slate-50"
-                          >
-                            {availablePeriods.map((p) => (
-                              <option key={p.value} value={p.value}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : (
-                        <div>
-                          <label className="block text-sm text-slate-500 mb-1.5">目标月份</label>
-                          <select
-                            disabled={!isAvailable}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300 disabled:opacity-50 disabled:bg-slate-50"
-                          >
-                            <option>2025-10</option>
-                          </select>
-                        </div>
-                      )}
+                      <div>
+                        <label className="block text-sm text-slate-500 mb-1.5">
+                          {isChangeDetection ? '时间范围' : '目标月份'}
+                        </label>
+                        <select
+                          value={selectedPeriod}
+                          onChange={(e) => setSelectedPeriod(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
+                        >
+                          {availablePeriods.map((p) => (
+                            <option key={p.value} value={p.value}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
                       <div className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-100 text-slate-500 text-sm">
                         <Play className="w-4 h-4" />
@@ -181,23 +160,13 @@ export default function MonitoringSection() {
                 {/* Right result area */}
                 <div className="lg:flex-1">
                   <GlassPanel className="h-[600px] flex flex-col p-0 overflow-hidden">
-                    {isAvailable ? (
-                      <MosaicViewer
-                        patches={patches}
-                        tileSize={tileSize}
-                        headId={activeHead}
-                        period={selectedPeriod}
-                        onPatchClick={handlePatchClick}
-                      />
-                    ) : (
-                      <div className="flex-1 flex items-center justify-center">
-                        <div className="text-center">
-                          <ImageOff className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                          <p className="text-slate-400">该任务模型正在训练中</p>
-                          <p className="text-xs text-slate-400 mt-1">敬请期待后续更新</p>
-                        </div>
-                      </div>
-                    )}
+                    <MosaicViewer
+                      patches={patches}
+                      tileSize={tileSize}
+                      headId={activeHead}
+                      period={selectedPeriod}
+                      onPatchClick={handlePatchClick}
+                    />
                   </GlassPanel>
                 </div>
               </div>
