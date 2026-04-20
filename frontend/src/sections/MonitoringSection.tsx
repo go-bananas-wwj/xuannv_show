@@ -20,10 +20,7 @@ export default function MonitoringSection() {
   const [activeHead, setActiveHead] = useState<string | null>(null)
   const [selectedPeriod, setSelectedPeriod] = useState('2025-04_vs_2025-10')
   const [availablePeriods, setAvailablePeriods] = useState<{ label: string; value: string }[]>([])
-  const [mosaicUrl, setMosaicUrl] = useState<string | null>(null)
   const [patches, setPatches] = useState<PatchInfo[]>([])
-  const [loading, setLoading] = useState(false)
-  const [, setLoadError] = useState<string | null>(null)
   const [detailPatch, setDetailPatch] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -57,42 +54,11 @@ export default function MonitoringSection() {
       .catch((err) => console.error('Failed to load periods:', err))
   }, [activeHead])
 
-  // 加载 mosaic
-  const loadMosaic = useCallback(async (head: string, period: string) => {
-    if (!head || head !== 'change_detection') return
-    setLoading(true)
-    setLoadError(null)
-    setMosaicUrl(null)
-
-    const url = `/api/heads/${head}/mosaic?period=${encodeURIComponent(period)}`
-    try {
-      const res = await fetch(url)
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || `HTTP ${res.status}`)
-      }
-      const blob = await res.blob()
-      setMosaicUrl(URL.createObjectURL(blob))
-    } catch (err: any) {
-      setLoadError(err.message || '加载失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
   // 点击 patch
   const handlePatchClick = useCallback((patchId: string) => {
     setDetailPatch(patchId)
     setIsModalOpen(true)
   }, [])
-
-  // 自动加载
-  useEffect(() => {
-    if (activeHead && isAvailable) {
-      loadMosaic(activeHead, selectedPeriod)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeHead, selectedPeriod, isAvailable])
 
   const tileSize = 128
 
@@ -186,14 +152,10 @@ export default function MonitoringSection() {
                         </div>
                       )}
 
-                      <button
-                        onClick={() => loadMosaic(activeHead!, selectedPeriod)}
-                        disabled={loading || !isAvailable}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-sky-500 text-white text-sm font-medium hover:bg-sky-600 transition-colors disabled:opacity-50"
-                      >
+                      <div className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-100 text-slate-500 text-sm">
                         <Play className="w-4 h-4" />
-                        {loading ? '加载中...' : '查看结果'}
-                      </button>
+                        选择时间范围后自动加载
+                      </div>
                     </div>
                   </GlassPanel>
 
@@ -221,11 +183,11 @@ export default function MonitoringSection() {
                   <GlassPanel className="h-[600px] flex flex-col p-0 overflow-hidden">
                     {isAvailable ? (
                       <MosaicViewer
-                        mosaicUrl={mosaicUrl}
                         patches={patches}
                         tileSize={tileSize}
+                        headId={activeHead}
+                        period={selectedPeriod}
                         onPatchClick={handlePatchClick}
-                        loading={loading}
                       />
                     ) : (
                       <div className="flex-1 flex items-center justify-center">

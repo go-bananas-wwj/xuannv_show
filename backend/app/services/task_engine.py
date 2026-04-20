@@ -86,6 +86,35 @@ class ChangeDetectionEngine:
             probs = torch.sigmoid(logits).squeeze().cpu().numpy()
         return probs
 
+    def load_embedding_pca_rgb(self, patch_id: str, month: str, out_size: int = 256) -> np.ndarray | None:
+        """加载 embedding 并做 PCA -> RGB 可视化."""
+        from sklearn.decomposition import PCA
+
+        path = EMBEDDING_DIR / f"{patch_id}_{month}.npy"
+        if not path.exists():
+            return None
+        try:
+            emb = np.load(path)  # [D, H, W]
+            D, H, W = emb.shape
+            pca = PCA(n_components=3)
+            flat = emb.reshape(D, -1).T
+            rgb = pca.fit_transform(flat).T.reshape(3, H, W)
+            rgb = np.transpose(rgb, (1, 2, 0))
+
+            for c in range(3):
+                ch = rgb[:, :, c]
+                p1, p99 = np.percentile(ch, [1, 99])
+                ch = (ch - p1) / (p99 - p1 + 1e-8)
+                ch = np.clip(ch, 0, 1)
+                ch = np.power(ch, 0.6)
+                rgb[:, :, c] = ch
+
+            rgb = (rgb * 255).astype(np.uint8)
+            pil_img = Image.fromarray(rgb).resize((out_size, out_size), Image.Resampling.BICUBIC)
+            return np.array(pil_img).astype(np.float32) / 255.0
+        except Exception:
+            return None
+
     def load_s2_rgb(self, patch_id: str, month: str, out_size: int = 256) -> np.ndarray | None:
         """加载 S2 RGB 影像 [H, W, 3] uint8."""
         from demo_v2.utils.constants import TIME_WINDOWS
@@ -122,7 +151,12 @@ class ChangeDetectionEngine:
     def render_mosaic_tile(self, patch_id: str, before_month: str, after_month: str, size: int = 128) -> Image.Image:
         """生成 mosaic 用的单 patch 缩略图."""
         probs = self.infer(patch_id, before_month, after_month)
-        return self.render_pred_heatmap(probs, size=size)
+        img = self.render_pred_heatmap(probs, size=size)
+        # 添加1px浅灰边框，让每个patch看起来像独立的item
+        from PIL import ImageDraw
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([0, 0, size - 1, size - 1], outline="#e2e8f0", width=1)
+        return img
 
     def render_detail_figure(
         self,
@@ -131,37 +165,57 @@ class ChangeDetectionEngine:
         after_month: str,
         panel_size: int = 256,
     ) -> Image.Image:
-        """生成弹窗用的详情图 (Before + After + Pred 三列)."""
+        """生成弹窗用的详情图 (Before S2 / After S2 / Before Emb / After Emb / Pred 五列)."""
         probs = self.infer(patch_id, before_month, after_month)
 
-        # 加载影像
+        # 加载5张图
         s2_b = self.load_s2_rgb(patch_id, before_month, out_size=panel_size)
         s2_a = self.load_s2_rgb(patch_id, after_month, out_size=panel_size)
-
-        # 如果影像缺失，用灰色填充
-        if s2_b is None:
-            s2_b = np.full((panel_size, panel_size, 3), 0.5, dtype=np.float32)
-        if s2_a is None:
-            s2_a = np.full((panel_size, panel_size, 3), 0.5, dtype=np.float32)
-
-        # 渲染预测热力图
+        emb_b = self.load_embedding_pca_rgb(patch_id, before_month, out_size=panel_size)
+        emb_a = self.load_embedding_pca_rgb(patch_id, after_month, out_size=panel_size)
         pred_img = self.render_pred_heatmap(probs, size=panel_size)
 
-        # 拼接三列
-        before_img = Image.fromarray((np.clip(s2_b, 0, 1) * 255).astype(np.uint8))
-        after_img = Image.fromarray((np.clip(s2_a, 0, 1) * 255).astype(np.uint8))
+        # 缺失时用灰色填充
+        placeholder = np.full((panel_size, panel_size, 3), 0.85, dtype=np.float32)
+        s2_b = s2_b if s2_b is not None else placeholder
+        s2_a = s2_a if s2_a is not None else placeholder
+        emb_b = emb_b if emb_b is not None else placeholder
+        emb_a = emb_a if emb_a is not None else placeholder
 
-        total_w = panel_size * 3 + 2  # 2px gap
-        total_h = panel_size + 40  # 40px for title
-        canvas = Image.new("RGB", (total_w, total_h), (255, 255, 255))
+        imgs = [
+            Image.fromarray((np.clip(s2_b, 0, 1) * 255).astype(np.uint8)),
+            Image.fromarray((np.clip(s2_a, 0, 1) * 255).astype(np.uint8)),
+            Image.fromarray((np.clip(emb_b, 0, 1) * 255).astype(np.uint8)),
+            Image.fromarray((np.clip(emb_a, 0, 1) * 255).astype(np.uint8)),
+            pred_img,
+        ]
 
-        # 粘贴图像
-        canvas.paste(before_img, (0, 40))
-        canvas.paste(after_img, (panel_size + 1, 40))
-        canvas.paste(pred_img, (panel_size * 2 + 2, 40))
+        gap = 24
+        total_w = panel_size * 5 + gap * 4
+        total_h = panel_size + 60  # 60px for labels
+        canvas = Image.new("RGB", (total_w, total_h), (248, 250, 252))
 
-        # 添加标题文字（简单处理，实际可用 PIL 字体）
-        # 由于字体问题，这里用文字标签在上方留空，前端弹窗内用 HTML 文字代替
+        # 粘贴每张图（y偏移60px给标签留空间）
+        for i, img in enumerate(imgs):
+            x = i * (panel_size + gap)
+            canvas.paste(img, (x, 60))
+
+        # 在顶部绘制5个中文标签
+        from PIL import ImageDraw, ImageFont
+        draw = ImageDraw.Draw(canvas)
+        labels = ["前期影像", "后期影像", "前期特征", "后期特征", "变化概率"]
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 14)
+        except Exception:
+            font = ImageFont.load_default()
+
+        for i, label in enumerate(labels):
+            x = i * (panel_size + gap) + panel_size // 2
+            bbox = draw.textbbox((0, 0), label, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_x = x - text_w // 2
+            draw.text((text_x, 20), label, fill="#64748b", font=font)
+
         return canvas
 
     def build_mosaic(
@@ -176,7 +230,7 @@ class ChangeDetectionEngine:
 
         mosaic_w = n_cols * tile_size
         mosaic_h = n_rows * tile_size
-        mosaic = Image.new("RGB", (mosaic_w, mosaic_h), (220, 220, 220))
+        mosaic = Image.new("RGB", (mosaic_w, mosaic_h), (248, 250, 252))
 
         for (ix, iy), pid in self._grid.items():
             col = ix - self.ix_min
@@ -185,7 +239,7 @@ class ChangeDetectionEngine:
                 tile = self.render_mosaic_tile(pid, before_month, after_month, tile_size)
             except FileNotFoundError:
                 # 缺失 embedding，用灰色块
-                tile = Image.new("RGB", (tile_size, tile_size), (200, 200, 200))
+                tile = Image.new("RGB", (tile_size, tile_size), (248, 250, 252))
 
             x = col * tile_size
             y = (n_rows - 1 - row) * tile_size  # iy=0 在顶部

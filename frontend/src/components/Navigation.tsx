@@ -12,6 +12,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [activeSection, setActiveSection] = useState('intro')
+  const [visible, setVisible] = useState(true)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -27,6 +28,13 @@ export default function Navigation({ onNavigate }: NavigationProps) {
             break
           }
         }
+      }
+
+      // 只在 intro section 显示 topbar（增加 60px 缓冲，避免边界闪烁）
+      const introEl = document.getElementById('section-intro')
+      if (introEl) {
+        const rect = introEl.getBoundingClientRect()
+        setVisible(rect.bottom > 60)
       }
     }
     window.addEventListener('scroll', handleScroll, { passive: true })
@@ -46,6 +54,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
     <nav
       className={cn(
         'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
+        visible ? 'translate-y-0' : '-translate-y-full',
         scrolled ? 'glass-strong py-2 shadow-sm' : 'bg-transparent py-4'
       )}
     >

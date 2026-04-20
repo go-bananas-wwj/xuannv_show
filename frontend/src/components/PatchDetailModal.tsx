@@ -82,7 +82,7 @@ export default function PatchDetailModal({
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.92, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden"
+            className="relative bg-white rounded-2xl shadow-2xl max-w-[1400px] w-full overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -108,7 +108,7 @@ export default function PatchDetailModal({
             </div>
 
             {/* Content */}
-            <div className="p-6">
+            <div className="p-5">
               {loading ? (
                 <div className="flex items-center justify-center py-20">
                   <div className="text-center">
@@ -128,21 +128,29 @@ export default function PatchDetailModal({
                   <img
                     src={detailUrl}
                     alt={`${patchId} detail`}
-                    className="w-full rounded-lg border border-slate-200"
+                    className="w-full rounded-lg"
                   />
-                  {/* 图例说明 */}
-                  <div className="flex items-center justify-center gap-6 text-xs text-slate-500">
-                    <div className="flex items-center gap-1.5">
+                  {/* 图例说明 — 5列标签 */}
+                  <div className="flex items-center justify-center gap-3 text-xs text-slate-500 flex-wrap">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
                       <div className="w-3 h-3 rounded bg-slate-300" />
-                      <span>前期影像</span>
+                      <span>前期 S2</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
                       <div className="w-3 h-3 rounded bg-slate-400" />
-                      <span>后期影像</span>
+                      <span>后期 S2</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+                      <div className="w-3 h-3 rounded bg-indigo-300" />
+                      <span>前期特征</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+                      <div className="w-3 h-3 rounded bg-indigo-400" />
+                      <span>后期特征</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
                       <div className="w-3 h-3 rounded bg-gradient-to-r from-blue-400 to-red-500" />
-                      <span>变化概率 (蓝→红)</span>
+                      <span>变化概率</span>
                     </div>
                   </div>
                 </div>
