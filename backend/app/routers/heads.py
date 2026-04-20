@@ -1,13 +1,17 @@
 """Heads API — 下游任务头结果."""
 from __future__ import annotations
 
+import functools
+import io
 import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.services.data_loader import data_loader
+from app.services.task_engine import get_cd_engine
 
 router = APIRouter(prefix="/heads", tags=["heads"])
 
@@ -79,13 +83,26 @@ async def get_mosaic(
     return FileResponse(path, media_type="image/png")
 
 
+@functools.lru_cache(maxsize=128)
+def _render_detail_cached(patch_id: str, period: str) -> bytes:
+    """缓存渲染的 detail 图 PNG bytes."""
+    before, after = period.split("_vs_")
+    img = get_cd_engine().render_detail_figure(patch_id, before, after, panel_size=256)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 @router.get("/{head_id}/patch/{patch_id}/detail", response_model=None)
 async def get_patch_detail(
     head_id: str,
     patch_id: str,
     period: str = Query(..., description="Time period"),
 ) -> Response:
-    """返回单 patch 的详情图 (弹窗用)."""
+    """返回单 patch 的详情图 (弹窗用).
+
+    优先使用内存缓存，未命中时在线程池中动态渲染。
+    """
     if head_id not in _VALID_HEAD_IDS:
         raise HTTPException(status_code=400, detail="Invalid head_id")
     if not _VALID_PATCH_ID_RE.match(patch_id):
@@ -96,13 +113,21 @@ async def get_patch_detail(
     if head_id != "change_detection":
         raise HTTPException(status_code=404, detail=f"Detail not available for head={head_id}")
 
-    path = RESULTS_DIR / head_id / "detail" / f"{patch_id}_{period}.png"
-    if not path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Detail for {patch_id} period={period} not found",
-        )
-    return FileResponse(path, media_type="image/png")
+    if "_vs_" not in period:
+        raise HTTPException(status_code=400, detail="Invalid period format, expected 'YYYY-MM_vs_YYYY-MM'")
+
+    # 1. 尝试内存缓存
+    try:
+        png_bytes = _render_detail_cached(patch_id, period)
+        return Response(content=png_bytes, media_type="image/png")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        # 缓存渲染失败，尝试回退到预计算文件
+        path = RESULTS_DIR / head_id / "detail" / f"{patch_id}_{period}.png"
+        if path.exists():
+            return FileResponse(path, media_type="image/png")
+        raise HTTPException(status_code=500, detail=f"Failed to render detail: {e}")
 
 
 @router.get("/{head_id}/patch/{patch_id}/tile", response_model=None)

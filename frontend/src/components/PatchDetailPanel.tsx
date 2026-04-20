@@ -38,6 +38,7 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
   const [matrixLoading, setMatrixLoading] = useState(false)
   const [matrixError, setMatrixError] = useState(false)
   const [imgLoaded, setImgLoaded] = useState(false)
+  const [isEnlarged, setIsEnlarged] = useState(false)
   const matrixUrlRef = useRef<string | null>(null)
 
   // Fetch Time×Source Matrix when patch changes
@@ -89,15 +90,22 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
   // Close on Escape key
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        if (isEnlarged) {
+          setIsEnlarged(false)
+        } else {
+          onClose()
+        }
+      }
     }
-    if (patch) {
+    if (patch || isEnlarged) {
       window.addEventListener('keydown', handleKey)
       return () => window.removeEventListener('keydown', handleKey)
     }
-  }, [patch, onClose])
+  }, [patch, isEnlarged, onClose])
 
   return (
+    <>
     <AnimatePresence>
       {patch && (
         <motion.div
@@ -157,10 +165,11 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
                       <img
                         src={matrixUrl}
                         alt="Time×Source Matrix"
-                        className="min-w-full block"
+                        className="min-w-full block cursor-zoom-in"
                         style={{ maxHeight: '400px', width: 'auto' }}
                         onLoad={() => setImgLoaded(true)}
                         onError={() => setMatrixError(true)}
+                        onClick={() => setIsEnlarged(true)}
                       />
                     </div>
                   )}
@@ -220,5 +229,47 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
         </motion.div>
       )}
     </AnimatePresence>
+
+    {/* Matrix 放大全屏弹窗 */}
+    <AnimatePresence>
+      {isEnlarged && matrixUrl && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+          onClick={() => setIsEnlarged(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={matrixUrl}
+              alt="Time×Source Matrix Enlarged"
+              className="block rounded-lg shadow-2xl"
+              style={{ maxWidth: '95vw', maxHeight: '90vh', width: 'auto', height: 'auto' }}
+            />
+            {/* 关闭按钮 */}
+            <button
+              onClick={() => setIsEnlarged(false)}
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white text-slate-600 hover:text-slate-900 flex items-center justify-center shadow-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            {/* 提示文字 */}
+            <p className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-white/70 text-xs whitespace-nowrap">
+              点击任意处关闭
+            </p>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
   )
 }

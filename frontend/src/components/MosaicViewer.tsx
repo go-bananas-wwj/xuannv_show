@@ -26,6 +26,9 @@ export default function MosaicViewer({
   loading: parentLoading = false,
 }: MosaicViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const MIN_SCALE = 0.05
+  const MAX_SCALE = 8.0
+
   const [scale, setScale] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
@@ -77,7 +80,7 @@ export default function MosaicViewer({
       const mouseY = e.clientY - rect.top
 
       const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1
-      const newScale = Math.min(Math.max(scale * zoomFactor, 0.3), 8)
+      const newScale = Math.min(Math.max(scale * zoomFactor, MIN_SCALE), MAX_SCALE)
 
       const scaleRatio = newScale / scale
       const newOffsetX = mouseX - (mouseX - offset.x) * scaleRatio
@@ -126,11 +129,20 @@ export default function MosaicViewer({
     setHoveredPatch(null)
   }, [])
 
-  // 重置视图
+  // 重置视图 — 回到自适应充满状态
   const resetView = useCallback(() => {
-    setScale(1)
-    setOffset({ x: 0, y: 0 })
-  }, [])
+    if (!containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    const imgW = grid.mosaicW
+    const imgH = grid.mosaicH
+    const fitScale = Math.min(rect.width / imgW, rect.height / imgH) * 0.95
+    const initialScale = Math.min(fitScale, 1)
+    setScale(initialScale)
+    setOffset({
+      x: (rect.width - imgW * initialScale) / 2,
+      y: (rect.height - imgH * initialScale) / 2,
+    })
+  }, [grid.mosaicW, grid.mosaicH])
 
   const allLoaded = loadedCount >= patches.length && patches.length > 0
   const isLoading = parentLoading || (!allLoaded && patches.length > 0)
@@ -217,7 +229,7 @@ export default function MosaicViewer({
         <button
           onClick={(e) => {
             e.stopPropagation()
-            setScale((s) => Math.min(s * 1.3, 8))
+            setScale((s) => Math.min(s * 1.3, MAX_SCALE))
           }}
           className="w-9 h-9 rounded-lg bg-white/80 backdrop-blur-sm border border-slate-300 text-slate-600 hover:text-slate-900 hover:bg-white flex items-center justify-center transition-colors shadow-sm"
         >
@@ -226,7 +238,7 @@ export default function MosaicViewer({
         <button
           onClick={(e) => {
             e.stopPropagation()
-            setScale((s) => Math.max(s / 1.3, 0.3))
+            setScale((s) => Math.max(s / 1.3, MIN_SCALE))
           }}
           className="w-9 h-9 rounded-lg bg-white/80 backdrop-blur-sm border border-slate-300 text-slate-600 hover:text-slate-900 hover:bg-white flex items-center justify-center transition-colors shadow-sm"
         >

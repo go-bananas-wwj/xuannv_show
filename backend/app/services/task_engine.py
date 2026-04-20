@@ -134,6 +134,52 @@ class ChangeDetectionEngine:
         except Exception:
             return None
 
+    def load_s2_rgb_natural(self, patch_id: str, month: str, out_size: int = 256) -> np.ndarray | None:
+        """加载 S2 RGB 原始影像，使用固定反射率范围归一化，不做动态 percentile stretch.
+
+        Sentinel-2 地表反射率值通常已除以 10000，典型范围 0~0.3。
+        使用固定范围 [0, 3500]（反射率 0~0.35）线性映射到 [0, 255]，
+        避免动态 stretch 放大噪声。
+        """
+        import rasterio
+        from demo_v2.utils.constants import TIME_WINDOWS, RAW_DIR
+        from demo_v2.engines.patch_image_loader import _find_best_tif
+
+        window = TIME_WINDOWS.get(month)
+        if window is None:
+            return None
+
+        source_dir = RAW_DIR / "s2" / patch_id
+        tif_path = _find_best_tif(source_dir, window[0], window[1])
+        if tif_path is None:
+            return None
+
+        try:
+            with rasterio.open(str(tif_path)) as ds:
+                data = ds.read()  # [C, H, W], reflectance * 10000
+
+            if data.shape[0] >= 4:
+                rgb = data[[2, 1, 0]].astype(np.float32)  # B4(R), B3(G), B2(B)
+            elif data.shape[0] >= 3:
+                rgb = data[:3].astype(np.float32)
+            else:
+                return None
+
+            # 固定范围线性映射: [0, 3500] -> [0, 1]
+            # 3500 = 反射率 0.35，覆盖绝大多数地表场景
+            rgb = np.clip(rgb / 3500.0, 0, 1)
+            rgb = rgb.transpose(1, 2, 0)
+
+            # Resize if needed (LANCZOS for best quality)
+            if rgb.shape[0] != out_size or rgb.shape[1] != out_size:
+                pil = Image.fromarray((rgb * 255).astype(np.uint8))
+                pil = pil.resize((out_size, out_size), Image.Resampling.LANCZOS)
+                rgb = np.array(pil).astype(np.float32) / 255.0
+
+            return rgb
+        except Exception:
+            return None
+
     def render_pred_heatmap(self, probs: np.ndarray, size: int = 128) -> Image.Image:
         """将概率图渲染为红色热力图."""
         # 使用 coolwarm colormap: 低值为蓝色，高值为红色
@@ -169,8 +215,8 @@ class ChangeDetectionEngine:
         probs = self.infer(patch_id, before_month, after_month)
 
         # 加载5张图
-        s2_b = self.load_s2_rgb(patch_id, before_month, out_size=panel_size)
-        s2_a = self.load_s2_rgb(patch_id, after_month, out_size=panel_size)
+        s2_b = self.load_s2_rgb_natural(patch_id, before_month, out_size=panel_size)
+        s2_a = self.load_s2_rgb_natural(patch_id, after_month, out_size=panel_size)
         emb_b = self.load_embedding_pca_rgb(patch_id, before_month, out_size=panel_size)
         emb_a = self.load_embedding_pca_rgb(patch_id, after_month, out_size=panel_size)
         pred_img = self.render_pred_heatmap(probs, size=panel_size)
@@ -203,7 +249,7 @@ class ChangeDetectionEngine:
         # 在顶部绘制5个中文标签
         from PIL import ImageDraw, ImageFont
         draw = ImageDraw.Draw(canvas)
-        labels = ["前期影像", "后期影像", "前期特征", "后期特征", "变化概率"]
+        labels = ["前期影像", "后期影像", "变化前嵌入", "变化后嵌入", "变化概率"]
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 14)
         except Exception:

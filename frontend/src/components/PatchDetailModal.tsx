@@ -142,11 +142,11 @@ export default function PatchDetailModal({
                     </div>
                     <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
                       <div className="w-3 h-3 rounded bg-indigo-300" />
-                      <span>前期特征</span>
+                      <span>变化前嵌入</span>
                     </div>
                     <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
                       <div className="w-3 h-3 rounded bg-indigo-400" />
-                      <span>后期特征</span>
+                      <span>变化后嵌入</span>
                     </div>
                     <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
                       <div className="w-3 h-3 rounded bg-gradient-to-r from-blue-400 to-red-500" />
