@@ -15,8 +15,12 @@ export default function Navigation({ onNavigate }: NavigationProps) {
   const [visible, setVisible] = useState(true)
 
   useEffect(() => {
+    // App 使用 h-dvh overflow-y-auto，滚动发生在内部 div 而非 window
+    const scrollContainer = document.querySelector('.h-dvh.overflow-y-auto') || window
+
     const handleScroll = () => {
-      setScrolled(window.scrollY > 50)
+      const scrollTop = scrollContainer === window ? window.scrollY : (scrollContainer as Element).scrollTop
+      setScrolled(scrollTop > 50)
 
       const sections = ['intro', 'about', 'data', 'downstream', 'agent', 'contact']
       for (const id of sections) {
@@ -37,8 +41,11 @@ export default function Navigation({ onNavigate }: NavigationProps) {
         setVisible(rect.bottom > 60)
       }
     }
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+    // 初始执行一次，确保状态正确
+    handleScroll()
+    return () => scrollContainer.removeEventListener('scroll', handleScroll)
   }, [])
 
   const navItems = [
