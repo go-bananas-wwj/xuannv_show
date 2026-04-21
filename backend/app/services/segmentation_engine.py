@@ -13,8 +13,8 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, "/workspace/xuannv")
 
 # ── Paths ──
-MODEL_DIR = Path(__file__).resolve().parent.parent.parent / "models"
-EMBEDDING_DIR = Path("/workspace/outputs/aef_qwen_v4_official/monthly_embeddings_2025")
+MODEL_DIR = Path("/workspace/outputs/aef_qwen_v5_production/weights/taskheads/linear_probes")
+EMBEDDING_DIR = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/monthly_embeddings_2025")
 RAW_DIR = Path("/workspace/raw/harbin_scenes")
 PATCHES_META_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data" / "harbin" / "patches_meta.json"
 
@@ -23,13 +23,13 @@ _GT_SOURCE_MAP = {
     "worldcover": "worldcover",
     "dynamic_world": "dynamic_world",
     "jrc_water": "jrc_water",
-    "building_extraction": "worldcover",
+    "building_extraction": "osm_buildings",
 }
 
 # 中文标签映射
 _LABELS_CN = {
-    "worldcover": ["森林", "灌木", "草地", "农田", "建筑", "裸地", "冰雪", "水体", "湿地", "红树林", "苔藓"],
-    "dynamic_world": ["水体", "森林", "草地", "水淹植被", "农田", "灌木/灌丛", "建筑", "裸地", "冰雪"],
+    "worldcover": ["森林", "草地", "农田", "建筑", "裸地", "水体", "湿地"],
+    "dynamic_world": ["水体", "农田", "建筑", "裸地", "冰雪"],
     "jrc_water": ["非水体", "水体"],
     "building_extraction": ["非建筑", "建筑"],
 }
@@ -41,8 +41,14 @@ class SegmentationEngine:
     def __init__(self) -> None:
         # 加载4个模型
         self.models: dict[str, dict] = {}
+        _V5_NAME_MAP = {
+            "worldcover": "worldcover",
+            "dynamic_world": "dynamic_world",
+            "jrc_water": "jrc_water",
+            "building_extraction": "osm_buildings",
+        }
         for head_id in ["worldcover", "dynamic_world", "jrc_water", "building_extraction"]:
-            path = MODEL_DIR / f"{head_id if head_id != 'building_extraction' else 'building'}_linear_probe.pkl"
+            path = MODEL_DIR / f"{_V5_NAME_MAP[head_id]}.pkl"
             self.models[head_id] = joblib.load(path)
 
         # 加载 patches 元数据

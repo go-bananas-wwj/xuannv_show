@@ -15,8 +15,8 @@ sys.path.insert(0, "/workspace/xuannv")
 from src.models.heads import ChangeDetectionHeadV3
 
 # ── Paths ──
-EMBEDDING_DIR = Path("/workspace/outputs/aef_qwen_v4_official/monthly_embeddings_2025")
-HEAD_PATH = Path("/workspace/outputs/aef_qwen_v4_official/monthly_cd_head/monthly_cd_head_v3_ohem.pt")
+EMBEDDING_DIR = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/monthly_embeddings_2025")
+HEAD_PATH = Path("/workspace/outputs/aef_qwen_v5_production/weights/cd_heads/monthly_cd_head.pt")
 PATCHES_META_PATH = Path("/workspace/xuannv_show/data/harbin/patches_meta.json")
 
 # S2 RGB loader (lazy import to avoid heavy deps at module load)
