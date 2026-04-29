@@ -8,6 +8,7 @@
 1. **训练数据 globe 可视化**（Three.js / Cesium 地球展示训练样本分布）
 2. **下游任务监测能力**（变化检测 + 4 大语义分割/分类任务，支持动态切换 Task Head、Mosaic 浏览、Patch 级详情弹窗）
 3. **智能体报告**（自然语言输入 → 后端生成任务报告并渲染，当前为 mock 数据）
+4. **自定义训练**（用户交互式标注 → SAM3 自动分割 → 训练 Linear Probe 分类头 → 推理展示）
 
 ## 技术栈
 
@@ -26,6 +27,7 @@
 | Leaflet / react-leaflet | ^1.9.4 / ^5.0.0 | 数据浏览区地图 |
 | Recharts | ^3.8.1 | 统计图表 |
 | react-markdown | ^10.1.0 | 智能体报告 Markdown 渲染 |
+| react-router-dom | ^7.0.0 | 路由（首页 + 自定义训练页） |
 | lucide-react | ^1.8.0 | 图标库（唯一图标来源） |
 | Axios | ^1.15.0 | API 客户端 |
 | clsx / tailwind-merge | ^2.1.1 / ^3.5.0 | 条件类名工具 |
@@ -67,7 +69,8 @@ xuannv_show/
 │   │   ├── types/index.ts  # TypeScript 类型定义（PatchMeta、TaskHead、RegionConfig 等）
 │   │   ├── config.json     # 地区配置（bounds、heads、sources、legends）
 │   │   ├── stores/
-│   │   │   └── appStore.ts # Zustand 全局状态（region、activeHead、selectedPatch 等）
+│   │   │   ├── appStore.ts      # Zustand 全局状态（region、activeHead、selectedPatch 等）
+│   │   │   └── annotateStore.ts # 标注页面状态（classes、annotations、maskCandidates 等）
 │   │   ├── utils/
 │   │   │   ├── api.ts      # Axios 封装 + API 方法
 │   │   │   └── cn.ts       # clsx + tailwind-merge 工具
@@ -86,6 +89,8 @@ xuannv_show/
 │   │   │   ├── ResultMapViewer.tsx
 │   │   │   ├── StatisticsChart.tsx
 │   │   │   └── TaskHeadSelector.tsx
+│   │   ├── pages/          # 路由页面
+│   │   │   └── AnnotatePage.tsx    # 自定义训练 — 交互式标注页面
 │   │   ├── sections/       # 页面六大板块
 │   │   │   ├── HeroSection.tsx
 │   │   │   ├── AboutSection.tsx
