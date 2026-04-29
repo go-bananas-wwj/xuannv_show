@@ -1,4 +1,4 @@
-.PHONY: dev build deploy setup clean
+.PHONY: dev build deploy setup clean sam3
 
 # Development: start backend and frontend dev servers
 dev:
@@ -7,6 +7,11 @@ dev:
 	@sleep 2
 	@echo "Starting frontend..."
 	@cd frontend && npm run dev
+
+# Start SAM3 inference service (requires sam3 conda env)
+sam3:
+	@echo "Starting SAM3 inference service on port 8001..."
+	@cd backend && CUDA_VISIBLE_DEVICES=2 conda run -n sam3 python scripts/sam3_server.py --port 8001
 
 # Production build
 build:

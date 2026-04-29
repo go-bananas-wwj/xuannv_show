@@ -16,3 +16,4 @@ INFO:     127.0.0.1:54174 - "GET /api/heads HTTP/1.1" 200 OK
 INFO:     127.0.0.1:54180 - "GET /api/heads HTTP/1.1" 200 OK
 INFO:     127.0.0.1:54188 - "GET /api/heads HTTP/1.1" 200 OK
 INFO:     127.0.0.1:44414 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50556 - "GET /api/annotate/classes HTTP/1.1" 404 Not Found
