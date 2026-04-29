@@ -26,7 +26,7 @@ for d in [ANNOTATIONS_DIR, MASKS_DIR, MODELS_DIR, RESULTS_DIR]:
 
 EMBEDDING_DIR = Path("/workspace/raw/xuannv_modelscope_upload/embeddings/v5_mixed_scale/monthly_embeddings_2025")
 RAW_DIR = Path("/workspace/raw/xuannv_modelscope_upload/raw_data")
-PATCHES_META_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data" / "harbin" / "patches_meta.json"
+PATCHES_META_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "data" / "harbin" / "patches_meta.json"
 
 SAM3_SERVICE_URL = "http://localhost:8001"
 
