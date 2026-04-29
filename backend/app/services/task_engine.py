@@ -15,7 +15,7 @@ sys.path.insert(0, "/workspace/xuannv")
 from src.models.heads import ChangeDetectionHeadV3
 
 # ── Paths ──
-EMBEDDING_DIR = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/monthly_embeddings_2025")
+EMBEDDING_DIR = Path("/workspace/raw/xuannv_modelscope_upload/embeddings/v5_mixed_scale/monthly_embeddings_2025")
 HEAD_PATH = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/monthly_cd_head/monthly_cd_head_v5_final.pt")
 PATCHES_META_PATH = Path("/workspace/xuannv_show/data/harbin/patches_meta.json")
 
@@ -31,12 +31,61 @@ def _get_rgb_loader():
     return _load_patch_source_rgb
 
 
+def _get_freest_device() -> torch.device:
+    """选择显存剩余最多的 GPU；若无可用的则回退到 CPU."""
+    if not torch.cuda.is_available():
+        return torch.device("cpu")
+
+    # 优先通过 nvidia-smi 查询显存（不依赖 PyTorch CUDA context，更稳定）
+    import shutil
+    import subprocess
+
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi:
+        try:
+            output = subprocess.check_output(
+                [
+                    nvidia_smi,
+                    "--query-gpu=index,memory.free",
+                    "--format=csv,noheader,nounits",
+                ],
+                text=True,
+                timeout=5,
+            )
+            max_free = -1
+            best_idx = 0
+            for line in output.strip().splitlines():
+                parts = line.split(",")
+                if len(parts) >= 2:
+                    idx = int(parts[0].strip())
+                    free = int(parts[1].strip())
+                    if free > max_free:
+                        max_free = free
+                        best_idx = idx
+            return torch.device(f"cuda:{best_idx}")
+        except Exception:
+            pass
+
+    # fallback: 使用 PyTorch API（可能因 CUDA context OOM 失败）
+    max_free = -1
+    best_idx = 0
+    for i in range(torch.cuda.device_count()):
+        try:
+            free, _ = torch.cuda.mem_get_info(i)
+            if free > max_free:
+                max_free = free
+                best_idx = i
+        except Exception:
+            continue
+    return torch.device(f"cuda:{best_idx}")
+
+
 class ChangeDetectionEngine:
     """变化检测推理引擎 — 加载 embedding + CD Head 生成结果图."""
 
     def __init__(self, device: str | None = None) -> None:
         if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.device = _get_freest_device()
         else:
             self.device = torch.device(device)
 

@@ -20,11 +20,20 @@ deploy:
 # Setup data for default region (harbin)
 setup:
 	@echo "Setting up Harbin region data..."
-	@python3 scripts/generate_patch_meta.py \
-		--region harbin \
-		--grid /workspace/index/harbin/grid/harbin_grid.geojson \
-		--raw-dir /workspace/raw/harbin_scenes \
-		--output-dir data/harbin
+	@if [ -f "data/harbin/patches_meta.json" ]; then \
+		echo "  ✓ patches_meta.json already exists, skipping generation"; \
+	else \
+		if [ -f "/workspace/index/harbin/grid/harbin_grid.geojson" ]; then \
+			python3 scripts/generate_patch_meta.py \
+				--region harbin \
+				--grid /workspace/index/harbin/grid/harbin_grid.geojson \
+				--raw-dir /workspace/raw/harbin_scenes \
+				--output-dir data/harbin; \
+		else \
+			echo "  ⚠ Grid file not found at /workspace/index/harbin/grid/harbin_grid.geojson"; \
+			echo "  ⚠ Please provide --grid manually or place patches_meta.json in data/harbin/"; \
+		fi; \
+	fi
 	@echo "Setup complete."
 
 # Clean build artifacts

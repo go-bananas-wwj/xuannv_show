@@ -13,7 +13,7 @@ from tqdm import tqdm
 from app.services.task_engine import ChangeDetectionEngine, EMBEDDING_DIR
 
 # ── Config ──
-RESULTS_DIR = Path("/workspace/outputs/aef_qwen_v4_official/results")
+RESULTS_DIR = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/results")
 TILE_SIZE = 128
 PANEL_SIZE = 256
 

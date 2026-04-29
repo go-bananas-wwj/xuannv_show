@@ -13,8 +13,8 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, "/workspace/xuannv")
 
 # ── Paths ──
-MODEL_DIR = Path("/workspace/outputs/aef_qwen_v5_production/weights/taskheads/linear_probes")
-EMBEDDING_DIR = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/monthly_embeddings_2025")
+MODEL_DIR = Path(__file__).resolve().parent.parent.parent / "models"
+EMBEDDING_DIR = Path("/workspace/raw/xuannv_modelscope_upload/embeddings/v5_mixed_scale/monthly_embeddings_2025")
 RAW_DIR = Path("/workspace/raw/harbin_scenes")
 PATCHES_META_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data" / "harbin" / "patches_meta.json"
 
@@ -41,14 +41,14 @@ class SegmentationEngine:
     def __init__(self) -> None:
         # 加载4个模型
         self.models: dict[str, dict] = {}
-        _V5_NAME_MAP = {
-            "worldcover": "worldcover",
-            "dynamic_world": "dynamic_world",
-            "jrc_water": "jrc_water",
-            "building_extraction": "osm_buildings",
+        _MODEL_FILENAME_MAP = {
+            "worldcover": "worldcover_linear_probe.pkl",
+            "dynamic_world": "dynamic_world_linear_probe.pkl",
+            "jrc_water": "jrc_water_linear_probe.pkl",
+            "building_extraction": "building_linear_probe.pkl",
         }
         for head_id in ["worldcover", "dynamic_world", "jrc_water", "building_extraction"]:
-            path = MODEL_DIR / f"{_V5_NAME_MAP[head_id]}.pkl"
+            path = MODEL_DIR / _MODEL_FILENAME_MAP[head_id]
             self.models[head_id] = joblib.load(path)
 
         # 加载 patches 元数据

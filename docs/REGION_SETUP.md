@@ -15,7 +15,7 @@
 ```bash
 ./scripts/setup_new_region.sh \
   --region yajiang \
-  --grid /workspace/index/yajiang/grid/yajiang_grid.geojson \
+  --grid /path/to/yajiang_grid.geojson \
   --raw-dir /workspace/raw/yajiang_scenes \
   --embeddings-dir /workspace/outputs/yajiang_v1/embeddings \
   --bounds "100.2,29.5,101.8,30.8" \

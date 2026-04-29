@@ -24,7 +24,7 @@ _VALID_VERSION_RE = re.compile(r"^v\d+$")
 _VALID_PATCH_ID_RE = re.compile(r"^patch_\d{6}$")
 
 # 预计算结果目录
-RESULTS_DIR = Path("/workspace/outputs/aef_qwen_v4_official/results")
+RESULTS_DIR = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/results")
 
 
 @router.get("")

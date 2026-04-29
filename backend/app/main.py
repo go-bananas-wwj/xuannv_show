@@ -3,11 +3,40 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+import os
+import time
+
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.routers import patches, embeddings, heads, agent
+
+
+class SecurityMiddleware(BaseHTTPMiddleware):
+    """简单安全中间件：生产环境可启用 API Key 校验."""
+
+    async def dispatch(self, request: Request, call_next):
+        api_key = os.environ.get("API_KEY")
+        # 仅对 /api/* 路由校验 API Key（若配置了）
+        if api_key and request.url.path.startswith("/api/"):
+            provided = request.headers.get("X-API-Key") or request.query_params.get("api_key")
+            if provided != api_key:
+                raise HTTPException(status_code=403, detail="Invalid or missing API key")
+        return await call_next(request)
+
+
+class TimingMiddleware(BaseHTTPMiddleware):
+    """记录慢请求（>2s）用于排查攻击或性能问题."""
+
+    async def dispatch(self, request: Request, call_next):
+        start = time.time()
+        response = await call_next(request)
+        elapsed = time.time() - start
+        if elapsed > 2.0:
+            print(f"[SLOW] {request.method} {request.url.path} took {elapsed:.2f}s")
+        return response
 
 # 路径
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -18,6 +47,9 @@ app = FastAPI(
     title="玄女底座 API",
     description="遥感模型展示平台后端",
     version="0.1.0",
+    docs_url=None,      # 禁用 Swagger UI
+    redoc_url=None,     # 禁用 ReDoc
+    openapi_url=None,   # 禁用 OpenAPI schema
 )
 
 # CORS — 生产环境应收紧为具体域名
@@ -27,6 +59,10 @@ _cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://loc
 if os.environ.get("ALLOW_ALL_ORIGINS", "").lower() == "true":
     _cors_origins = ["*"]
 
+# 若从容器外部访问，默认只允许 localhost，除非显式配置 CORS_ORIGINS
+if not os.environ.get("CORS_ORIGINS"):
+    _cors_origins = ["http://localhost:5173", "http://localhost:3000"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -34,6 +70,10 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+# 安全中间件
+app.add_middleware(SecurityMiddleware)
+app.add_middleware(TimingMiddleware)
 
 # API 路由
 app.include_router(patches.router, prefix="/api")
