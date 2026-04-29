@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { BookOpen, Info, LayoutGrid, Waves, Bot, Mail, Menu, X } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { BookOpen, Info, LayoutGrid, Waves, Bot, Mail, Menu, X, PenTool } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 interface NavigationProps {
@@ -9,12 +10,19 @@ interface NavigationProps {
 }
 
 export default function Navigation({ onNavigate }: NavigationProps) {
+  const location = useLocation()
+  const isHome = location.pathname === '/'
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [activeSection, setActiveSection] = useState('intro')
   const [visible, setVisible] = useState(true)
 
   useEffect(() => {
+    if (!isHome) {
+      setVisible(true)
+      setScrolled(true)
+      return
+    }
     // App 使用 h-dvh overflow-y-auto，滚动发生在内部 div 而非 window
     const scrollContainer = document.querySelector('.h-dvh.overflow-y-auto') || window
 
@@ -43,10 +51,9 @@ export default function Navigation({ onNavigate }: NavigationProps) {
     }
 
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
-    // 初始执行一次，确保状态正确
     handleScroll()
     return () => scrollContainer.removeEventListener('scroll', handleScroll)
-  }, [])
+  }, [isHome])
 
   const navItems = [
     { id: 'intro' as const, label: '项目介绍', icon: BookOpen },
@@ -62,21 +69,21 @@ export default function Navigation({ onNavigate }: NavigationProps) {
       className={cn(
         'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
         visible ? 'translate-y-0' : '-translate-y-full',
-        scrolled ? 'glass-strong py-2 shadow-sm' : 'bg-transparent py-4'
+        scrolled || !isHome ? 'glass-strong py-2 shadow-sm' : 'bg-transparent py-4'
       )}
     >
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
             <LayoutGrid className="w-4 h-4 text-sky-500" />
           </div>
           <span className="font-display font-bold text-lg tracking-tight text-slate-800">
             玄女底座
           </span>
-        </div>
+        </Link>
 
         <div className="hidden lg:flex items-center gap-1">
-          {navItems.map((item) => (
+          {isHome && navItems.map((item) => (
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
@@ -91,6 +98,18 @@ export default function Navigation({ onNavigate }: NavigationProps) {
               {item.label}
             </button>
           ))}
+          <Link
+            to="/annotate"
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-all duration-200',
+              location.pathname === '/annotate'
+                ? 'text-sky-600 bg-sky-50 border border-sky-200'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+            )}
+          >
+            <PenTool className="w-4 h-4" />
+            自定义训练
+          </Link>
         </div>
 
         <button
@@ -103,7 +122,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
 
       {mobileOpen && (
         <div className="lg:hidden glass-strong mt-2 mx-4 rounded-xl p-4 space-y-2 shadow-lg">
-          {navItems.map((item) => (
+          {isHome && navItems.map((item) => (
             <button
               key={item.id}
               onClick={() => {
@@ -121,6 +140,19 @@ export default function Navigation({ onNavigate }: NavigationProps) {
               {item.label}
             </button>
           ))}
+          <Link
+            to="/annotate"
+            onClick={() => setMobileOpen(false)}
+            className={cn(
+              'flex items-center gap-2 w-full px-4 py-3 rounded-lg text-sm',
+              location.pathname === '/annotate'
+                ? 'text-sky-600 bg-sky-50'
+                : 'text-slate-500'
+            )}
+          >
+            <PenTool className="w-4 h-4" />
+            自定义训练
+          </Link>
         </div>
       )}
     </nav>

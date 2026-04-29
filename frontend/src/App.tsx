@@ -1,3 +1,4 @@
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import Navigation from '@/components/Navigation'
@@ -7,8 +8,9 @@ import DataSection from '@/sections/DataSection'
 import MonitoringSection from '@/sections/MonitoringSection'
 import AgentSection from '@/sections/AgentSection'
 import ContactSection from '@/sections/ContactSection'
+import AnnotatePage from '@/pages/AnnotatePage'
 
-function App() {
+function HomePage() {
   const introRef = useRef<HTMLDivElement>(null)
   const aboutRef = useRef<HTMLDivElement>(null)
   const dataRef = useRef<HTMLDivElement>(null)
@@ -109,4 +111,20 @@ function App() {
   )
 }
 
-export default App
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/annotate" element={<AnnotatePage />} />
+      <Route path="*" element={<HomePage />} />
+    </Routes>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
+  )
+}

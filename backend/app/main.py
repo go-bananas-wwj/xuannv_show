@@ -6,12 +6,14 @@ from pathlib import Path
 import os
 import time
 
+import numpy as np
+from PIL import Image
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.routers import patches, embeddings, heads, agent
+from app.routers import patches, embeddings, heads, agent, annotate
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
@@ -80,6 +82,54 @@ app.include_router(patches.router, prefix="/api")
 app.include_router(embeddings.router, prefix="/api")
 app.include_router(heads.router, prefix="/api")
 app.include_router(agent.router, prefix="/api")
+app.include_router(annotate.router, prefix="/api")
+
+
+# ── Patch Image Endpoint (for annotate page) ──
+@app.get("/api/patches/{patch_id}/image")
+async def get_patch_image(patch_id: str, month: str) -> bytes:
+    """Serve S2 RGB image for a patch and month."""
+    import sys
+    sys.path.insert(0, "/workspace/xuannv")
+    from demo_v2.utils.constants import TIME_WINDOWS, RAW_DIR as DEMO_RAW_DIR
+    from demo_v2.engines.patch_image_loader import _find_best_tif
+    import rasterio
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+
+    window = TIME_WINDOWS.get(month)
+    if window is None:
+        raise HTTPException(status_code=400, detail=f"Unknown month: {month}")
+
+    source_dir = DEMO_RAW_DIR / "s2" / patch_id
+    tif_path = _find_best_tif(source_dir, window[0], window[1])
+    if tif_path is None:
+        raise HTTPException(status_code=404, detail=f"No S2 image found for {patch_id} {month}")
+
+    with rasterio.open(str(tif_path)) as ds:
+        data = ds.read()
+
+    if data.shape[0] >= 4:
+        rgb = data[[2, 1, 0]].astype(np.float32)
+    elif data.shape[0] >= 3:
+        rgb = data[:3].astype(np.float32)
+    else:
+        raise HTTPException(status_code=500, detail="Not enough bands")
+
+    rgb = np.clip(rgb / 3500.0, 0, 1)
+    rgb = rgb.transpose(1, 2, 0)
+
+    # Resize to 256x256
+    if rgb.shape[0] != 256 or rgb.shape[1] != 256:
+        img = Image.fromarray((rgb * 255).astype(np.uint8))
+        img = img.resize((256, 256), Image.Resampling.LANCZOS)
+    else:
+        img = Image.fromarray((rgb * 255).astype(np.uint8))
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
 
 
 @app.get("/health")
