@@ -277,9 +277,14 @@ class TrainingEngine:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X_train)
 
+        # Determine multi_class strategy based on number of unique labels
+        unique_labels = np.unique(y_train)
+        n_classes = len(unique_labels)
+        multi_class = "multinomial" if n_classes > 2 else "auto"
+
         clf = LogisticRegression(
             max_iter=1000,
-            multi_class="multinomial",
+            multi_class=multi_class,
             solver="lbfgs",
             n_jobs=-1,
         )
