@@ -3,10 +3,62 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useAnnotateStore } from '@/stores/annotateStore'
-import { fetchPatches, preloadSAM3Embedding, segmentWithSAM, fetchClasses, createClass, fetchAnnotations, saveAnnotation, deleteAnnotation, startTraining, getTrainingStatus, inferWithCustomModel } from '@/utils/api'
+import {
+  fetchPatches, preloadSAM3Embedding, segmentWithSAM,
+  fetchClasses, createClass, fetchAnnotations, saveAnnotation, deleteAnnotation,
+  startTraining, getTrainingStatus, inferWithCustomModel,
+} from '@/utils/api'
 import type { PatchMeta } from '@/types'
 
 const MONTHS = ['2025-04', '2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10']
+
+// Decode RLE to canvas-ready ImageData
+function rleToImageData(rleStr: string, width: number, height: number, color: string, alpha: number = 0.5): ImageData {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')!
+
+  // Simple RLE decode (fallback format)
+  let mask: boolean[]
+  if (rleStr.includes(':')) {
+    const [, data] = rleStr.split(':')
+    const runs = data.split(',').map(Number)
+    const flat: number[] = []
+    let val = 0
+    for (const r of runs) {
+      for (let i = 0; i < r; i++) flat.push(val)
+      val = 1 - val
+    }
+    mask = flat.map((v) => v === 1)
+  } else {
+    // pycocotools RLE — can't decode in browser easily, use placeholder
+    mask = new Array(width * height).fill(false)
+  }
+
+  const imgData = ctx.createImageData(width, height)
+  const rgb = hexToRgb(color)
+  for (let i = 0; i < width * height; i++) {
+    if (mask[i]) {
+      imgData.data[i * 4] = rgb.r
+      imgData.data[i * 4 + 1] = rgb.g
+      imgData.data[i * 4 + 2] = rgb.b
+      imgData.data[i * 4 + 3] = Math.round(alpha * 255)
+    }
+  }
+  return imgData
+}
+
+function hexToRgb(hex: string) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : { r: 255, g: 0, b: 0 }
+}
 
 export default function AnnotatePage() {
   const store = useAnnotateStore()
@@ -17,7 +69,10 @@ export default function AnnotatePage() {
   const [newClassName, setNewClassName] = useState('')
   const [newClassColor, setNewClassColor] = useState('#FF4444')
   const [isTraining, setIsTraining] = useState(false)
-  const canvasRef = useRef<HTMLDivElement>(null)
+  const [showInference, setShowInference] = useState(false)
+  const canvasContainerRef = useRef<HTMLDivElement>(null)
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
 
   // Load patches on mount
   useEffect(() => {
@@ -30,6 +85,7 @@ export default function AnnotatePage() {
   useEffect(() => {
     if (!store.selectedPatch) {
       setImageUrl(null)
+      store.setMaskCandidates([])
       return
     }
     const patch = store.selectedPatch
@@ -37,6 +93,7 @@ export default function AnnotatePage() {
     const url = `/api/patches/${patch.patch_id}/image?month=${month}`
     setImageUrl(url)
     store.setIsEmbeddingReady(false)
+    store.setMaskCandidates([])
     preloadSAM3Embedding(patch.patch_id, month)
       .then(() => store.setIsEmbeddingReady(true))
       .catch((err) => {
@@ -45,10 +102,45 @@ export default function AnnotatePage() {
       })
   }, [store.selectedPatch, store.selectedMonth])
 
+  // Draw mask overlay on canvas when candidates change
+  useEffect(() => {
+    const canvas = overlayCanvasRef.current
+    const img = imgRef.current
+    if (!canvas || !img || !img.complete) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    if (store.maskCandidates.length > 0 && store.selectedMaskIndex < store.maskCandidates.length) {
+      const mask = store.maskCandidates[store.selectedMaskIndex]
+      const activeClass = store.classes.find((c) => c.id === store.activeClassId)
+      const color = activeClass?.color || '#FF4444'
+
+      try {
+        const imgData = rleToImageData(mask.mask_rle, canvas.width, canvas.height, color, 0.45)
+        ctx.putImageData(imgData, 0, 0)
+
+        // Draw outline
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.strokeStyle = color
+        ctx.lineWidth = 2
+        // Simplified: draw bounding box as outline placeholder
+        // Full contour tracing would require more complex logic
+      } catch (e) {
+        console.error('Failed to render mask:', e)
+      }
+    }
+  }, [store.maskCandidates, store.selectedMaskIndex, store.activeClassId, store.classes])
+
   // Handle canvas click for SAM segmentation
   const handleCanvasClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!store.selectedPatch || !store.isEmbeddingReady || !canvasRef.current) return
-    const rect = canvasRef.current.getBoundingClientRect()
+    if (!store.selectedPatch || !store.isEmbeddingReady || !imgRef.current) return
+    const img = imgRef.current
+    const rect = img.getBoundingClientRect()
     const x = (e.clientX - rect.left) / rect.width
     const y = (e.clientY - rect.top) / rect.height
     if (x < 0 || x > 1 || y < 0 || y > 1) return
@@ -118,7 +210,6 @@ export default function AnnotatePage() {
     try {
       const { job_id } = await startTraining()
       store.setTrainingJob({ job_id, status: 'running' })
-      // Poll for status
       const interval = setInterval(async () => {
         try {
           const status = await getTrainingStatus(job_id)
@@ -145,6 +236,7 @@ export default function AnnotatePage() {
     try {
       const result = await inferWithCustomModel(store.selectedPatch.patch_id, store.selectedMonth)
       store.setInferenceImageUrl(result.image_url)
+      setShowInference(true)
     } catch (err) {
       console.error('Inference failed:', err)
     }
@@ -242,24 +334,42 @@ export default function AnnotatePage() {
           <div className="flex-1 overflow-auto flex items-center justify-center p-4">
             {imageUrl ? (
               <div
-                ref={canvasRef}
+                ref={canvasContainerRef}
                 className="relative cursor-crosshair"
                 style={{ transform: `scale(${scale})`, transformOrigin: 'center' }}
                 onClick={handleCanvasClick}
                 onContextMenu={(e) => { e.preventDefault(); handleCanvasClick(e as any) }}
               >
                 <img
+                  ref={imgRef}
                   src={imageUrl}
                   alt="S2"
                   className="block max-w-[512px] max-h-[512px] rounded-lg shadow"
                   draggable={false}
                 />
-                {/* Mask overlay would go here */}
+                <canvas
+                  ref={overlayCanvasRef}
+                  className="absolute top-0 left-0 pointer-events-none"
+                  style={{ width: '100%', height: '100%' }}
+                />
               </div>
             ) : (
               <div className="text-slate-400 text-sm">请选择一个 Patch 开始标注</div>
             )}
           </div>
+
+          {/* Inference result overlay */}
+          {showInference && store.inferenceImageUrl && (
+            <div className="px-4 py-3 bg-white border-t border-slate-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-slate-500">推理结果</span>
+                <button onClick={() => setShowInference(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <img src={store.inferenceImageUrl} alt="Inference" className="max-h-48 rounded border border-slate-200" />
+            </div>
+          )}
 
           {/* Mask candidates */}
           {store.maskCandidates.length > 0 && (

@@ -139,6 +139,7 @@ def train_classifier(background_tasks: BackgroundTasks) -> dict:
     return {"job_id": job_id}
 
 class TrainStatusOut(BaseModel):
+    model_config = {"protected_namespaces": ()}
     job_id: str
     status: str
     accuracy: float | None = None
