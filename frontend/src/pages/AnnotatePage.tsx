@@ -255,32 +255,40 @@ export default function AnnotatePage() {
           {/* Canvas area */}
           <div className="flex-1 overflow-auto flex items-center justify-center p-4">
             {imageUrl ? (
-              <div
-                ref={canvasContainerRef}
-                className="relative cursor-crosshair"
-                style={{ transform: `scale(${scale})`, transformOrigin: 'center' }}
-                onClick={handleCanvasClick}
-                onContextMenu={(e) => { e.preventDefault(); handleCanvasClick(e as any) }}
-              >
-                <img
-                  ref={imgRef}
-                  src={imageUrl}
-                  alt="S2"
-                  className="block max-w-[512px] max-h-[512px] rounded-lg shadow"
-                  draggable={false}
-                />
-                {selectedMask && (
+              <div className="flex flex-col items-center gap-2">
+                <div className="text-xs text-slate-400 bg-white px-3 py-1.5 rounded-full shadow-sm">
+                  左键点击 = 添加正点（包含区域） | Shift+点击 / 右键 = 添加负点（排除区域）
+                </div>
+                <div
+                  ref={canvasContainerRef}
+                  className="relative cursor-crosshair"
+                  style={{ transform: `scale(${scale})`, transformOrigin: 'center' }}
+                  onClick={handleCanvasClick}
+                  onContextMenu={(e) => { e.preventDefault(); handleCanvasClick(e as any) }}
+                >
                   <img
-                    src={`data:image/png;base64,${selectedMask.mask_b64}`}
-                    alt="mask"
-                    className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-50"
-                    style={{ mixBlendMode: 'multiply' }}
+                    ref={imgRef}
+                    src={imageUrl}
+                    alt="S2"
+                    className="block max-w-[512px] max-h-[512px] rounded-lg shadow"
                     draggable={false}
                   />
-                )}
+                  {selectedMask && (
+                    <img
+                      src={`data:image/png;base64,${selectedMask.mask_b64}`}
+                      alt="mask"
+                      className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-50"
+                      style={{ mixBlendMode: 'multiply' }}
+                      draggable={false}
+                    />
+                  )}
+                </div>
               </div>
             ) : (
-              <div className="text-slate-400 text-sm">请选择一个 Patch 开始标注</div>
+              <div className="text-slate-400 text-sm flex flex-col items-center gap-2">
+                <div>请从左侧选择一个 Patch 开始标注</div>
+                <div className="text-xs text-slate-300">选择月份 → 选择 Patch → 点击影像进行标注</div>
+              </div>
             )}
           </div>
 
