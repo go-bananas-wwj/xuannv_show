@@ -81,7 +81,7 @@ export async function segmentWithSAM(
   pointCoords: Array<{ x: number; y: number }>,
   pointLabels: number[],
   multimaskOutput: boolean = true
-): Promise<{ masks_rle: string[]; scores: number[] }> {
+): Promise<{ masks_b64: string[]; scores: number[] }> {
   const { data } = await api.post('/annotate/sam/segment', {
     embedding_id: embeddingId,
     point_coords: pointCoords,
@@ -123,7 +123,7 @@ export interface Annotation {
   patch_id: string
   month: string
   class_id: string
-  mask_rle: string
+  mask_b64: string
   score: number
   created_at: string
 }
@@ -132,7 +132,7 @@ export interface AnnotationCreate {
   patch_id: string
   month: string
   class_id: string
-  mask_rle: string
+  mask_b64: string
   score: number
 }
 

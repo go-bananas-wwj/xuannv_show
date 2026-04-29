@@ -12,54 +12,6 @@ import type { PatchMeta } from '@/types'
 
 const MONTHS = ['2025-04', '2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10']
 
-// Decode RLE to canvas-ready ImageData
-function rleToImageData(rleStr: string, width: number, height: number, color: string, alpha: number = 0.5): ImageData {
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')!
-
-  // Simple RLE decode (fallback format)
-  let mask: boolean[]
-  if (rleStr.includes(':')) {
-    const [, data] = rleStr.split(':')
-    const runs = data.split(',').map(Number)
-    const flat: number[] = []
-    let val = 0
-    for (const r of runs) {
-      for (let i = 0; i < r; i++) flat.push(val)
-      val = 1 - val
-    }
-    mask = flat.map((v) => v === 1)
-  } else {
-    // pycocotools RLE — can't decode in browser easily, use placeholder
-    mask = new Array(width * height).fill(false)
-  }
-
-  const imgData = ctx.createImageData(width, height)
-  const rgb = hexToRgb(color)
-  for (let i = 0; i < width * height; i++) {
-    if (mask[i]) {
-      imgData.data[i * 4] = rgb.r
-      imgData.data[i * 4 + 1] = rgb.g
-      imgData.data[i * 4 + 2] = rgb.b
-      imgData.data[i * 4 + 3] = Math.round(alpha * 255)
-    }
-  }
-  return imgData
-}
-
-function hexToRgb(hex: string) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return result
-    ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16),
-      }
-    : { r: 255, g: 0, b: 0 }
-}
-
 export default function AnnotatePage() {
   const store = useAnnotateStore()
   const [patches, setPatches] = useState<PatchMeta[]>([])
@@ -71,7 +23,6 @@ export default function AnnotatePage() {
   const [isTraining, setIsTraining] = useState(false)
   const [showInference, setShowInference] = useState(false)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
-  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
 
   // Load patches on mount
@@ -102,39 +53,10 @@ export default function AnnotatePage() {
       })
   }, [store.selectedPatch, store.selectedMonth])
 
-  // Draw mask overlay on canvas when candidates change
-  useEffect(() => {
-    const canvas = overlayCanvasRef.current
-    const img = imgRef.current
-    if (!canvas || !img || !img.complete) return
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    canvas.width = img.naturalWidth
-    canvas.height = img.naturalHeight
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    if (store.maskCandidates.length > 0 && store.selectedMaskIndex < store.maskCandidates.length) {
-      const mask = store.maskCandidates[store.selectedMaskIndex]
-      const activeClass = store.classes.find((c) => c.id === store.activeClassId)
-      const color = activeClass?.color || '#FF4444'
-
-      try {
-        const imgData = rleToImageData(mask.mask_rle, canvas.width, canvas.height, color, 0.45)
-        ctx.putImageData(imgData, 0, 0)
-
-        // Draw outline
-        ctx.globalCompositeOperation = 'source-over'
-        ctx.strokeStyle = color
-        ctx.lineWidth = 2
-        // Simplified: draw bounding box as outline placeholder
-        // Full contour tracing would require more complex logic
-      } catch (e) {
-        console.error('Failed to render mask:', e)
-      }
-    }
-  }, [store.maskCandidates, store.selectedMaskIndex, store.activeClassId, store.classes])
+  // Selected mask for overlay display
+  const selectedMask = store.maskCandidates.length > 0
+    ? store.maskCandidates[store.selectedMaskIndex]
+    : null
 
   // Handle canvas click for SAM segmentation
   const handleCanvasClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
@@ -174,7 +96,7 @@ export default function AnnotatePage() {
         patch_id: store.selectedPatch.patch_id,
         month: store.selectedMonth,
         class_id: store.activeClassId,
-        mask_rle: mask.mask_rle,
+        mask_b64: mask.mask_b64,
         score: mask.score,
       })
       store.addAnnotation(ann)
@@ -347,11 +269,15 @@ export default function AnnotatePage() {
                   className="block max-w-[512px] max-h-[512px] rounded-lg shadow"
                   draggable={false}
                 />
-                <canvas
-                  ref={overlayCanvasRef}
-                  className="absolute top-0 left-0 pointer-events-none"
-                  style={{ width: '100%', height: '100%' }}
-                />
+                {selectedMask && (
+                  <img
+                    src={`data:image/png;base64,${selectedMask.mask_b64}`}
+                    alt="mask"
+                    className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-50"
+                    style={{ mixBlendMode: 'multiply' }}
+                    draggable={false}
+                  />
+                )}
               </div>
             ) : (
               <div className="text-slate-400 text-sm">请选择一个 Patch 开始标注</div>

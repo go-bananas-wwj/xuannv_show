@@ -30,43 +30,23 @@ PATCHES_META_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data
 
 SAM3_SERVICE_URL = "http://localhost:8001"
 
-# ── RLE encode/decode (pycocotools) ──
-try:
-    from pycocotools import mask as mask_utils
+# ── Base64 PNG helpers ──
+import base64
+from io import BytesIO
 
-    def encode_rle(mask: np.ndarray) -> str:
-        """Encode binary mask to RLE string."""
-        rle = mask_utils.encode(np.asfortranarray(mask.astype(np.uint8)))
-        return rle["counts"].decode("utf-8")
 
-    def decode_rle(rle_str: str, height: int, width: int) -> np.ndarray:
-        """Decode RLE string to binary mask."""
-        rle = {"counts": rle_str.encode("utf-8"), "size": [height, width]}
-        return mask_utils.decode(rle).astype(bool)
-except Exception:
-    # Fallback: simple numpy RLE
-    def encode_rle(mask: np.ndarray) -> str:
-        flat = mask.astype(np.uint8).flatten()
-        runs = []
-        count = 1
-        for i in range(1, len(flat)):
-            if flat[i] == flat[i - 1]:
-                count += 1
-            else:
-                runs.append(count)
-                count = 1
-        runs.append(count)
-        return f"{mask.shape[0]}x{mask.shape[1]}:" + ",".join(map(str, runs))
+def _base64_to_mask(b64_str: str) -> np.ndarray:
+    """Decode base64 PNG to binary mask."""
+    img = Image.open(BytesIO(base64.b64decode(b64_str)))
+    return np.array(img) > 128
 
-    def decode_rle(rle_str: str, height: int, width: int) -> np.ndarray:
-        prefix, data = rle_str.split(":", 1)
-        runs = list(map(int, data.split(",")))
-        flat = []
-        val = 0
-        for r in runs:
-            flat.extend([val] * r)
-            val = 1 - val
-        return np.array(flat[: height * width], dtype=bool).reshape(height, width)
+
+def _mask_to_base64_png(mask: np.ndarray) -> str:
+    """Encode binary mask to base64 PNG string."""
+    img = Image.fromarray((mask.astype(np.uint8) * 255))
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
 # ── Class Manager ──
@@ -121,13 +101,12 @@ class AnnotationStore:
     def list_annotations(self) -> list[dict]:
         return self._load()
 
-    def create_annotation(self, patch_id: str, month: str, class_id: str, mask_rle: str, score: float) -> dict:
+    def create_annotation(self, patch_id: str, month: str, class_id: str, mask_b64: str, score: float) -> dict:
         ann_id = f"ann_{uuid.uuid4().hex[:8]}"
         mask_path = self.masks_dir / f"{ann_id}.npz"
 
-        # Decode RLE and save mask
-        # SAM mask is typically 256x256 (input image size)
-        mask = decode_rle(mask_rle, 256, 256)
+        # Decode base64 PNG and save mask
+        mask = _base64_to_mask(mask_b64)
         np.savez_compressed(mask_path, mask=mask)
 
         ann = {
@@ -135,7 +114,7 @@ class AnnotationStore:
             "patch_id": patch_id,
             "month": month,
             "class_id": class_id,
-            "mask_rle": mask_rle,
+            "mask_b64": mask_b64,
             "score": score,
             "created_at": datetime.now().isoformat(),
         }
@@ -219,7 +198,7 @@ class SAM3Client:
         point_labels: list[int],
         multimask_output: bool = True,
     ) -> tuple[list[str], list[float]]:
-        """Predict mask using cached embedding."""
+        """Predict mask using cached embedding. Returns base64 PNG strings."""
         resp = requests.post(
             f"{self.base_url}/predict",
             json={
@@ -232,7 +211,7 @@ class SAM3Client:
         )
         resp.raise_for_status()
         data = resp.json()
-        return data["masks_rle"], data["scores"]
+        return data["masks_b64"], data["scores"]
 
 
 # ── Training Engine ──

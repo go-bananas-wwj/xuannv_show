@@ -5,59 +5,26 @@
 
 依赖:
     - sam3 (pip install -e . from facebookresearch/sam3)
-    - fastapi, uvicorn, Pillow, numpy, pycocotools
+    - fastapi, uvicorn, Pillow, numpy
 """
 from __future__ import annotations
 
 import argparse
+import base64
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from PIL import Image
 from pydantic import BaseModel
-
-# RLE utilities
-try:
-    from pycocotools import mask as mask_utils
-
-    def encode_rle(mask: np.ndarray) -> str:
-        rle = mask_utils.encode(np.asfortranarray(mask.astype(np.uint8)))
-        return rle["counts"].decode("utf-8")
-
-    def decode_rle(rle_str: str, height: int, width: int) -> np.ndarray:
-        rle = {"counts": rle_str.encode("utf-8"), "size": [height, width]}
-        return mask_utils.decode(rle).astype(bool)
-except Exception:
-    def encode_rle(mask: np.ndarray) -> str:
-        flat = mask.astype(np.uint8).flatten()
-        runs = []
-        count = 1
-        for i in range(1, len(flat)):
-            if flat[i] == flat[i - 1]:
-                count += 1
-            else:
-                runs.append(count)
-                count = 1
-        runs.append(count)
-        return f"{mask.shape[0]}x{mask.shape[1]}:" + ",".join(map(str, runs))
-
-    def decode_rle(rle_str: str, height: int, width: int) -> np.ndarray:
-        prefix, data = rle_str.split(":", 1)
-        runs = list(map(int, data.split(",")))
-        flat = []
-        val = 0
-        for r in runs:
-            flat.extend([val] * r)
-            val = 1 - val
-        return np.array(flat[: height * width], dtype=bool).reshape(height, width)
-
 
 app = FastAPI(title="SAM3 Inference Service")
 
 # Global predictor (loaded lazily on first request)
 _predictor = None
+
 
 def get_predictor():
     global _predictor
@@ -79,6 +46,14 @@ def get_predictor():
 _embedding_cache: dict[str, dict] = {}
 
 
+def _mask_to_base64_png(mask: np.ndarray) -> str:
+    """Convert binary mask to base64 PNG string."""
+    img = Image.fromarray((mask.astype(np.uint8) * 255))
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
 class EmbedRequest(BaseModel):
     image_path: str
     embedding_id: str
@@ -92,7 +67,7 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
-    masks_rle: list[str]
+    masks_b64: list[str]   # base64 PNG strings
     scores: list[float]
 
 
@@ -103,7 +78,6 @@ def embed(req: EmbedRequest) -> dict:
     image = Image.open(req.image_path).convert("RGB")
     image_np = np.array(image)
     predictor.set_image(image_np)
-    # Store reference that this embedding_id is ready
     _embedding_cache[req.embedding_id] = {
         "shape": image_np.shape[:2],
     }
@@ -130,12 +104,8 @@ def predict(req: PredictRequest) -> dict:
     )
 
     # masks shape: (N, H, W), scores: (N,)
-    masks_rle = [encode_rle(mask) for mask in masks]
-    return {"masks_rle": masks_rle, "scores": scores.tolist()}
-
-
-# Need to import HTTPException after defining routes to avoid circular import issues
-from fastapi import HTTPException
+    masks_b64 = [_mask_to_base64_png(mask) for mask in masks]
+    return {"masks_b64": masks_b64, "scores": scores.tolist()}
 
 
 if __name__ == "__main__":

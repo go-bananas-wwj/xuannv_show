@@ -69,19 +69,19 @@ class SegmentRequest(BaseModel):
     multimask_output: bool = True
 
 class SegmentResponse(BaseModel):
-    masks_rle: list[str]
+    masks_b64: list[str]
     scores: list[float]
 
 @router.post("/sam/segment", response_model=SegmentResponse)
 def sam_segment(req: SegmentRequest) -> dict:
     client = get_sam3_client()
-    masks_rle, scores = client.predict(
+    masks_b64, scores = client.predict(
         req.embedding_id,
         req.point_coords,
         req.point_labels,
         req.multimask_output,
     )
-    return {"masks_rle": masks_rle, "scores": scores}
+    return {"masks_b64": masks_b64, "scores": scores}
 
 # ── Annotations ──
 
@@ -89,7 +89,7 @@ class AnnotationCreate(BaseModel):
     patch_id: str
     month: str
     class_id: str
-    mask_rle: str
+    mask_b64: str
     score: float
 
 class AnnotationOut(BaseModel):
@@ -97,7 +97,7 @@ class AnnotationOut(BaseModel):
     patch_id: str
     month: str
     class_id: str
-    mask_rle: str
+    mask_b64: str
     score: float
     created_at: str
 
@@ -113,7 +113,7 @@ def create_annotation(req: AnnotationCreate) -> dict:
         patch_id=req.patch_id,
         month=req.month,
         class_id=req.class_id,
-        mask_rle=req.mask_rle,
+        mask_b64=req.mask_b64,
         score=req.score,
     )
 

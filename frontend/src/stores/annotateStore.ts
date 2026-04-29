@@ -18,7 +18,7 @@ export interface Annotation {
 }
 
 export interface MaskCandidate {
-  mask_rle: string
+  mask_b64: string
   score: number
 }
 
