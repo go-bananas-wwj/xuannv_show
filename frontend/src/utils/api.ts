@@ -78,7 +78,7 @@ export async function preloadSAM3Embedding(
 // SAM segmentation
 export async function segmentWithSAM(
   embeddingId: string,
-  pointCoords: Array<{ x: number; y: number }>,
+  pointCoords: Array<[number, number]>,
   pointLabels: number[],
   multimaskOutput: boolean = true
 ): Promise<{ masks_b64: string[]; scores: number[] }> {

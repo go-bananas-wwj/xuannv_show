@@ -12,7 +12,7 @@ export interface Annotation {
   patch_id: string
   month: string
   class_id: string
-  mask_rle: string
+  mask_b64: string
   score: number
   created_at: string
 }

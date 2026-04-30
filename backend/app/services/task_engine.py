@@ -287,29 +287,12 @@ class ChangeDetectionEngine:
 
         gap = 24
         total_w = panel_size * 5 + gap * 4
-        total_h = panel_size + 60  # 60px for labels
+        total_h = panel_size
         canvas = Image.new("RGB", (total_w, total_h), (248, 250, 252))
 
-        # 粘贴每张图（y偏移60px给标签留空间）
         for i, img in enumerate(imgs):
             x = i * (panel_size + gap)
-            canvas.paste(img, (x, 60))
-
-        # 在顶部绘制5个中文标签
-        from PIL import ImageDraw, ImageFont
-        draw = ImageDraw.Draw(canvas)
-        labels = ["前期影像", "后期影像", "变化前嵌入", "变化后嵌入", "变化概率"]
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 14)
-        except Exception:
-            font = ImageFont.load_default()
-
-        for i, label in enumerate(labels):
-            x = i * (panel_size + gap) + panel_size // 2
-            bbox = draw.textbbox((0, 0), label, font=font)
-            text_w = bbox[2] - bbox[0]
-            text_x = x - text_w // 2
-            draw.text((text_x, 20), label, fill="#64748b", font=font)
+            canvas.paste(img, (x, 0))
 
         return canvas
 

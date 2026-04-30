@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X } from 'lucide-react'
+import { ArrowLeft, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X, Move, MousePointer2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useAnnotateStore } from '@/stores/annotateStore'
 import {
@@ -11,19 +11,30 @@ import {
 import type { PatchMeta } from '@/types'
 
 const MONTHS = ['2025-04', '2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10']
+const IMG_SIZE = 512
+
+interface PromptPoint {
+  x: number
+  y: number
+  label: number // 1 = positive, 0 = negative
+}
 
 export default function AnnotatePage() {
   const store = useAnnotateStore()
   const [patches, setPatches] = useState<PatchMeta[]>([])
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [scale, setScale] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 })
+  const [isSpacePressed, setIsSpacePressed] = useState(false)
+  const [points, setPoints] = useState<PromptPoint[]>([])
   const [isAddingClass, setIsAddingClass] = useState(false)
   const [newClassName, setNewClassName] = useState('')
   const [newClassColor, setNewClassColor] = useState('#FF4444')
   const [isTraining, setIsTraining] = useState(false)
   const [showInference, setShowInference] = useState(false)
-  const canvasContainerRef = useRef<HTMLDivElement>(null)
-  const imgRef = useRef<HTMLImageElement>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
 
   // Load patches on mount
   useEffect(() => {
@@ -37,6 +48,9 @@ export default function AnnotatePage() {
     if (!store.selectedPatch) {
       setImageUrl(null)
       store.setMaskCandidates([])
+      setPoints([])
+      setScale(1)
+      setPan({ x: 0, y: 0 })
       return
     }
     const patch = store.selectedPatch
@@ -45,6 +59,9 @@ export default function AnnotatePage() {
     setImageUrl(url)
     store.setIsEmbeddingReady(false)
     store.setMaskCandidates([])
+    setPoints([])
+    setScale(1)
+    setPan({ x: 0, y: 0 })
     preloadSAM3Embedding(patch.patch_id, month)
       .then(() => store.setIsEmbeddingReady(true))
       .catch((err) => {
@@ -58,27 +75,86 @@ export default function AnnotatePage() {
     ? store.maskCandidates[store.selectedMaskIndex]
     : null
 
-  // Handle canvas click for SAM segmentation
-  const handleCanvasClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!store.selectedPatch || !store.isEmbeddingReady || !imgRef.current) return
-    const img = imgRef.current
-    const rect = img.getBoundingClientRect()
-    const x = (e.clientX - rect.left) / rect.width
-    const y = (e.clientY - rect.top) / rect.height
-    if (x < 0 || x > 1 || y < 0 || y > 1) return
+  // ── Coordinate mapping: viewport pixel → image normalized (0~1) ──
+  const viewportToNormalized = useCallback((clientX: number, clientY: number) => {
+    const viewport = viewportRef.current
+    if (!viewport) return null
+    const rect = viewport.getBoundingClientRect()
+    const clickX = clientX - rect.left
+    const clickY = clientY - rect.top
+    const centerX = rect.width / 2
+    const centerY = rect.height / 2
+    const relX = (clickX - centerX - pan.x) / scale
+    const relY = (clickY - centerY - pan.y) / scale
+    const nx = (relX + IMG_SIZE / 2) / IMG_SIZE
+    const ny = (relY + IMG_SIZE / 2) / IMG_SIZE
+    if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return null
+    return { x: nx, y: ny }
+  }, [scale, pan])
+
+  // ── Wheel zoom (centered on mouse pointer) ──
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    const viewport = viewportRef.current
+    if (!viewport) return
+    const rect = viewport.getBoundingClientRect()
+    const mouseX = e.clientX - rect.left - rect.width / 2
+    const mouseY = e.clientY - rect.top - rect.height / 2
+
+    const delta = -e.deltaY * 0.0015
+    const newScale = Math.min(Math.max(scale * (1 + delta), 0.3), 8)
+    const ratio = newScale / scale
+    const newPanX = mouseX - (mouseX - pan.x) * ratio
+    const newPanY = mouseY - (mouseY - pan.y) * ratio
+    setScale(newScale)
+    setPan({ x: newPanX, y: newPanY })
+  }, [scale, pan])
+
+  // ── Mouse handlers for pan & click ──
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button === 1 || (isSpacePressed && e.button === 0)) {
+      setIsPanning(true)
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
+      e.preventDefault()
+      return
+    }
+  }, [isSpacePressed, pan])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (isPanning) {
+      setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y })
+    }
+  }, [isPanning, panStart])
+
+  const handleMouseUp = useCallback(() => {
+    setIsPanning(false)
+  }, [])
+
+  // ── Canvas click for SAM segmentation (accumulate points) ──
+  const handleCanvasClick = useCallback(async (e: React.MouseEvent) => {
+    if (isPanning) return
+    if (!store.selectedPatch || !store.isEmbeddingReady) return
+    if (e.button !== 0 && e.button !== 2) return
+
+    const pos = viewportToNormalized(e.clientX, e.clientY)
+    if (!pos) return
 
     const isNegative = e.shiftKey || e.button === 2
+    const newPoint: PromptPoint = { x: pos.x, y: pos.y, label: isNegative ? 0 : 1 }
+    const nextPoints = [...points, newPoint]
+    setPoints(nextPoints)
+
     store.setIsLoadingMask(true)
     try {
       const embeddingId = `${store.selectedPatch.patch_id}_${store.selectedMonth}`
       const result = await segmentWithSAM(
         embeddingId,
-        [[x, y]],
-        [isNegative ? 0 : 1],
+        nextPoints.map((p) => [p.x, p.y]),
+        nextPoints.map((p) => p.label),
         true
       )
-      store.setMaskCandidates(result.masks_rle.map((rle, i) => ({
-        mask_rle: rle,
+      store.setMaskCandidates(result.masks_b64.map((b64, i) => ({
+        mask_b64: b64,
         score: result.scores[i],
       })))
     } catch (err) {
@@ -86,7 +162,7 @@ export default function AnnotatePage() {
     } finally {
       store.setIsLoadingMask(false)
     }
-  }, [store.selectedPatch, store.selectedMonth, store.isEmbeddingReady])
+  }, [store.selectedPatch, store.selectedMonth, store.isEmbeddingReady, points, isPanning, viewportToNormalized])
 
   const handleSaveAnnotation = async () => {
     if (!store.selectedPatch || !store.activeClassId || store.maskCandidates.length === 0) return
@@ -101,6 +177,7 @@ export default function AnnotatePage() {
       })
       store.addAnnotation(ann)
       store.setMaskCandidates([])
+      setPoints([])
     } catch (err) {
       console.error('Failed to save annotation:', err)
     }
@@ -164,6 +241,40 @@ export default function AnnotatePage() {
     }
   }
 
+  // ── Keyboard shortcuts ──
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.code === 'Space') {
+        setIsSpacePressed(true)
+        e.preventDefault()
+      }
+      if (e.key === '1' && store.maskCandidates.length > 0) store.setSelectedMaskIndex(0)
+      if (e.key === '2' && store.maskCandidates.length > 1) store.setSelectedMaskIndex(1)
+      if (e.key === '3' && store.maskCandidates.length > 2) store.setSelectedMaskIndex(2)
+      if ((e.key === 'a' || e.key === 'A') && store.maskCandidates.length > 0 && store.activeClassId) {
+        handleSaveAnnotation()
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        store.setMaskCandidates([])
+        setPoints([])
+      }
+      if (e.key === 'Escape') {
+        store.setMaskCandidates([])
+        setPoints([])
+      }
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setIsSpacePressed(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [store.maskCandidates, store.activeClassId])
+
   return (
     <div className="h-dvh bg-slate-50 text-slate-800 flex flex-col">
       {/* Top bar */}
@@ -226,16 +337,19 @@ export default function AnnotatePage() {
           {/* Toolbar */}
           <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-slate-200">
             <div className="flex items-center gap-2">
-              <button onClick={() => setScale((s) => Math.min(s + 0.25, 3))} className="p-1.5 rounded hover:bg-slate-100">
+              <button onClick={() => setScale((s) => Math.min(s * 1.2, 8))} className="p-1.5 rounded hover:bg-slate-100" title="放大">
                 <ZoomIn className="w-4 h-4 text-slate-500" />
               </button>
-              <button onClick={() => setScale((s) => Math.max(s - 0.25, 0.5))} className="p-1.5 rounded hover:bg-slate-100">
+              <button onClick={() => setScale((s) => Math.max(s / 1.2, 0.3))} className="p-1.5 rounded hover:bg-slate-100" title="缩小">
                 <ZoomOut className="w-4 h-4 text-slate-500" />
               </button>
-              <button onClick={() => setScale(1)} className="p-1.5 rounded hover:bg-slate-100">
+              <button onClick={() => { setScale(1); setPan({ x: 0, y: 0 }) }} className="p-1.5 rounded hover:bg-slate-100" title="重置视图">
                 <Maximize className="w-4 h-4 text-slate-500" />
               </button>
               <span className="text-xs text-slate-400 ml-1">{Math.round(scale * 100)}%</span>
+              <span className="text-xs text-slate-300 ml-2 hidden sm:inline">
+                滚轮缩放 · 空格+拖拽平移
+              </span>
             </div>
             <div className="flex items-center gap-2">
               {store.isEmbeddingReady && (
@@ -253,41 +367,91 @@ export default function AnnotatePage() {
           </div>
 
           {/* Canvas area */}
-          <div className="flex-1 overflow-auto flex items-center justify-center p-4">
+          <div className="flex-1 relative overflow-hidden">
             {imageUrl ? (
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-xs text-slate-400 bg-white px-3 py-1.5 rounded-full shadow-sm">
-                  左键点击 = 添加正点（包含区域） | Shift+点击 / 右键 = 添加负点（排除区域）
+              <>
+                {/* Hint overlay */}
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 text-xs text-slate-400 bg-white/90 backdrop-blur px-3 py-1.5 rounded-full shadow-sm pointer-events-none">
+                  左键 = 正点 · 右键/Shift+左键 = 负点 · 滚轮 = 缩放 · 空格+拖拽 = 平移
                 </div>
+
+                {/* Viewport */}
                 <div
-                  ref={canvasContainerRef}
-                  className="relative cursor-crosshair"
-                  style={{ transform: `scale(${scale})`, transformOrigin: 'center' }}
+                  ref={viewportRef}
+                  className={cn(
+                    'absolute inset-0 flex items-center justify-center',
+                    isSpacePressed ? 'cursor-grab' : 'cursor-crosshair'
+                  )}
+                  onWheel={handleWheel}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
                   onClick={handleCanvasClick}
                   onContextMenu={(e) => { e.preventDefault(); handleCanvasClick(e as any) }}
                 >
-                  <img
-                    ref={imgRef}
-                    src={imageUrl}
-                    alt="S2"
-                    className="block max-w-[512px] max-h-[512px] rounded-lg shadow"
-                    draggable={false}
-                  />
-                  {selectedMask && (
+                  {/* Canvas wrapper (transformed) */}
+                  <div
+                    className="relative"
+                    style={{
+                      width: IMG_SIZE,
+                      height: IMG_SIZE,
+                      transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+                      transformOrigin: 'center center',
+                    }}
+                  >
+                    {/* Satellite image */}
                     <img
-                      src={`data:image/png;base64,${selectedMask.mask_b64}`}
-                      alt="mask"
-                      className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-50"
-                      style={{ mixBlendMode: 'multiply' }}
+                      src={imageUrl}
+                      alt="S2"
+                      className="block w-full h-full rounded-lg shadow"
                       draggable={false}
                     />
-                  )}
+
+                    {/* Mask overlay */}
+                    {selectedMask && (
+                      <img
+                        src={`data:image/png;base64,${selectedMask.mask_b64}`}
+                        alt="mask"
+                        className="absolute inset-0 w-full h-full pointer-events-none opacity-40"
+                        style={{ mixBlendMode: 'multiply' }}
+                        draggable={false}
+                      />
+                    )}
+
+                    {/* Prompt points SVG */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+                      {points.map((p, i) => {
+                        const cx = p.x * IMG_SIZE
+                        const cy = p.y * IMG_SIZE
+                        const isPos = p.label === 1
+                        const color = isPos ? '#22c55e' : '#ef4444'
+                        const r = 6 / scale
+                        const strokeW = 2 / scale
+                        return (
+                          <g key={i}>
+                            <circle cx={cx} cy={cy} r={r} fill={color} fillOpacity={0.25} stroke={color} strokeWidth={strokeW} />
+                            {isPos ? (
+                              <>
+                                <line x1={cx - r * 0.5} y1={cy} x2={cx + r * 0.5} y2={cy} stroke="white" strokeWidth={strokeW} />
+                                <line x1={cx} y1={cy - r * 0.5} x2={cx} y2={cy + r * 0.5} stroke="white" strokeWidth={strokeW} />
+                              </>
+                            ) : (
+                              <line x1={cx - r * 0.5} y1={cy} x2={cx + r * 0.5} y2={cy} stroke="white" strokeWidth={strokeW} />
+                            )}
+                          </g>
+                        )
+                      })}
+                    </svg>
+                  </div>
                 </div>
-              </div>
+              </>
             ) : (
-              <div className="text-slate-400 text-sm flex flex-col items-center gap-2">
-                <div>请从左侧选择一个 Patch 开始标注</div>
-                <div className="text-xs text-slate-300">选择月份 → 选择 Patch → 点击影像进行标注</div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-slate-400 text-sm flex flex-col items-center gap-2">
+                  <div>请从左侧选择一个 Patch 开始标注</div>
+                  <div className="text-xs text-slate-300">选择月份 → 选择 Patch → 点击影像进行标注</div>
+                </div>
               </div>
             )}
           </div>
@@ -308,20 +472,30 @@ export default function AnnotatePage() {
           {/* Mask candidates */}
           {store.maskCandidates.length > 0 && (
             <div className="px-4 py-3 bg-white border-t border-slate-200">
-              <div className="text-xs text-slate-500 mb-2">选择最佳 mask：</div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-slate-500">选择最佳 mask（快捷键 1/2/3）：</span>
+                <span className="text-xs text-slate-400">A=接受 · R=拒绝 · Esc=取消</span>
+              </div>
               <div className="flex gap-2">
                 {store.maskCandidates.map((mask, i) => (
                   <button
                     key={i}
                     onClick={() => store.setSelectedMaskIndex(i)}
                     className={cn(
-                      'px-3 py-2 rounded-lg text-sm border transition-all',
+                      'flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-all',
                       store.selectedMaskIndex === i
                         ? 'bg-sky-50 border-sky-300 text-sky-700'
                         : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                     )}
                   >
-                    Mask {i + 1} ({(mask.score * 100).toFixed(1)}%)
+                    {mask.mask_b64 && (
+                      <img
+                        src={`data:image/png;base64,${mask.mask_b64}`}
+                        alt=""
+                        className="w-8 h-8 rounded border border-slate-200 opacity-60"
+                      />
+                    )}
+                    <span>Mask {i + 1} ({(mask.score * 100).toFixed(1)}%)</span>
                   </button>
                 ))}
               </div>
@@ -332,14 +506,14 @@ export default function AnnotatePage() {
                   className="flex items-center gap-1 px-3 py-1.5 bg-sky-500 text-white text-sm rounded-lg hover:bg-sky-600 disabled:opacity-50"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  保存标注
+                  保存标注 (A)
                 </button>
                 <button
-                  onClick={() => store.setMaskCandidates([])}
+                  onClick={() => { store.setMaskCandidates([]); setPoints([]) }}
                   className="flex items-center gap-1 px-3 py-1.5 text-slate-500 text-sm rounded-lg hover:bg-slate-100"
                 >
                   <X className="w-3.5 h-3.5" />
-                  取消
+                  取消 (R)
                 </button>
               </div>
             </div>
