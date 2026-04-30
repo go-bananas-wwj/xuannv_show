@@ -130,9 +130,6 @@ async def get_patch_detail(
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except Exception as e:
-            path = RESULTS_DIR / head_id / "detail" / f"{patch_id}_{period}.png"
-            if path.exists():
-                return FileResponse(path, media_type="image/png")
             raise HTTPException(status_code=500, detail=f"Failed to render detail: {e}")
     else:
         # 分类任务：单期 period="YYYY-MM"
