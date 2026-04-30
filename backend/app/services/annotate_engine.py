@@ -134,12 +134,34 @@ class AnnotationStore:
 
 # ── SAM3 Client ──
 class SAM3Client:
-    """HTTP client for SAM3 microservice running on localhost:8001."""
+    """Inline SAM3 client using local model (no HTTP microservice needed)."""
 
-    def __init__(self, base_url: str = SAM3_SERVICE_URL) -> None:
-        self.base_url = base_url
+    def __init__(self) -> None:
         self._temp_dir = ANNOTATIONS_DIR / "temp_images"
         self._temp_dir.mkdir(exist_ok=True)
+        self._model = None
+        self._processor = None
+        self._cache: dict[str, dict] = {}
+
+    def _ensure_model(self):
+        if self._model is None:
+            import torch
+            from sam3.model_builder import build_sam3_image_model
+            from sam3.model.sam3_image_processor import Sam3Processor
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            print(f"[SAM3Client] Loading SAM3 model on {device}...")
+            checkpoint_path = "/workspace/models/facebook/sam3/sam3.pt"
+            bpe_path = "/workspace/xuannv_show/backend/sam3/sam3/assets/bpe_simple_vocab_16e6.txt.gz"
+            self._model = build_sam3_image_model(
+                bpe_path=bpe_path,
+                checkpoint_path=checkpoint_path,
+                device=device,
+                enable_inst_interactivity=True,
+            )
+            self._model.to(device)
+            self._processor = Sam3Processor(self._model, device=device)
+            print("[SAM3Client] SAM3 model loaded.")
 
     def _load_s2_image(self, patch_id: str, month: str) -> Path:
         """Load S2 image for a patch and save as temporary PNG for SAM3."""
@@ -183,13 +205,14 @@ class SAM3Client:
 
     def preload_image(self, patch_id: str, month: str, embedding_id: str) -> None:
         """Precompute SAM3 image embedding."""
+        self._ensure_model()
         image_path = self._load_s2_image(patch_id, month)
-        resp = requests.post(
-            f"{self.base_url}/embed",
-            json={"image_path": str(image_path), "embedding_id": embedding_id},
-            timeout=60,
-        )
-        resp.raise_for_status()
+        image = Image.open(image_path).convert("RGB")
+        state = self._processor.set_image(image)
+        self._cache[embedding_id] = {
+            "state": state,
+            "shape": (state["original_height"], state["original_width"]),
+        }
 
     def predict(
         self,
@@ -199,19 +222,27 @@ class SAM3Client:
         multimask_output: bool = True,
     ) -> tuple[list[str], list[float]]:
         """Predict mask using cached embedding. Returns base64 PNG strings."""
-        resp = requests.post(
-            f"{self.base_url}/predict",
-            json={
-                "embedding_id": embedding_id,
-                "point_coords": point_coords,
-                "point_labels": point_labels,
-                "multimask_output": multimask_output,
-            },
-            timeout=30,
+        if embedding_id not in self._cache:
+            raise ValueError("Embedding not found. Call preload_image first.")
+
+        self._ensure_model()
+        state = self._cache[embedding_id]["state"]
+        img_h, img_w = self._cache[embedding_id]["shape"]
+
+        # Convert normalized coords to pixel coords
+        coords = np.array(point_coords) * np.array([[img_w, img_h]])
+        labels = np.array(point_labels)
+
+        masks, scores, logits = self._model.predict_inst(
+            state,
+            point_coords=coords,
+            point_labels=labels,
+            multimask_output=multimask_output,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["masks_b64"], data["scores"]
+
+        # masks shape: (N, H, W), scores: (N,)
+        masks_b64 = [_mask_to_base64_png(mask) for mask in masks]
+        return masks_b64, scores.tolist()
 
 
 # ── Training Engine ──

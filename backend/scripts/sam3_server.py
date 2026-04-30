@@ -1,7 +1,7 @@
-"""SAM3 推理微服务 — 运行在独立的 sam3 conda env 中.
+"""SAM3 推理微服务 — 运行在 aef-qwen conda env 中.
 
 启动方式:
-    CUDA_VISIBLE_DEVICES=2 conda run -n sam3 python backend/scripts/sam3_server.py --port 8001
+    CUDA_VISIBLE_DEVICES=2 python backend/scripts/sam3_server.py --port 8001
 
 依赖:
     - sam3 (pip install -e . from facebookresearch/sam3)
@@ -22,28 +22,33 @@ from pydantic import BaseModel
 
 app = FastAPI(title="SAM3 Inference Service")
 
-# Global predictor (loaded lazily on first request)
-_predictor = None
-
-
-def get_predictor():
-    global _predictor
-    if _predictor is None:
-        import torch
-        from sam3 import SAM3InteractiveImagePredictor
-        from sam3.model_builder import build_sam3_image_model
-
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Loading SAM3 model on {device}...")
-        model = build_sam3_image_model()
-        model.to(device)
-        _predictor = SAM3InteractiveImagePredictor(model)
-        print("SAM3 model loaded.")
-    return _predictor
-
+# Globals (loaded lazily on first request)
+_model = None
+_processor = None
 
 # In-memory cache for image embeddings
 _embedding_cache: dict[str, dict] = {}
+
+
+def get_model_and_processor():
+    global _model, _processor
+    if _model is None:
+        import torch
+        from sam3.model_builder import build_sam3_image_model
+        from sam3.model.sam3_image_processor import Sam3Processor
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Loading SAM3 model on {device}...")
+        checkpoint_path = "/workspace/models/facebook/sam3/sam3.pt"
+        _model = build_sam3_image_model(
+            checkpoint_path=checkpoint_path,
+            device=device,
+            enable_inst_interactivity=True,
+        )
+        _model.to(device)
+        _processor = Sam3Processor(_model, device=device)
+        print("SAM3 model loaded.")
+    return _model, _processor
 
 
 def _mask_to_base64_png(mask: np.ndarray) -> str:
@@ -74,12 +79,12 @@ class PredictResponse(BaseModel):
 @app.post("/embed")
 def embed(req: EmbedRequest) -> dict:
     """Precompute image embedding for later predict calls."""
-    predictor = get_predictor()
+    model, processor = get_model_and_processor()
     image = Image.open(req.image_path).convert("RGB")
-    image_np = np.array(image)
-    predictor.set_image(image_np)
+    state = processor.set_image(image)
     _embedding_cache[req.embedding_id] = {
-        "shape": image_np.shape[:2],
+        "state": state,
+        "shape": (state["original_height"], state["original_width"]),
     }
     return {"status": "ok", "embedding_id": req.embedding_id}
 
@@ -90,14 +95,16 @@ def predict(req: PredictRequest) -> dict:
     if req.embedding_id not in _embedding_cache:
         raise HTTPException(status_code=400, detail="Embedding not found. Call /embed first.")
 
-    predictor = get_predictor()
+    model, processor = get_model_and_processor()
     img_h, img_w = _embedding_cache[req.embedding_id]["shape"]
+    state = _embedding_cache[req.embedding_id]["state"]
 
     # Convert normalized coords to pixel coords
     point_coords = np.array(req.point_coords) * np.array([[img_w, img_h]])
     point_labels = np.array(req.point_labels)
 
-    masks, scores, logits = predictor.predict(
+    masks, scores, logits = model.predict_inst(
+        state,
         point_coords=point_coords,
         point_labels=point_labels,
         multimask_output=req.multimask_output,
