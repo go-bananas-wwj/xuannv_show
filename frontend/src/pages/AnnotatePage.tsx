@@ -36,8 +36,14 @@ export default function AnnotatePage() {
   const [newClassColor, setNewClassColor] = useState('#FF4444')
   const [isTraining, setIsTraining] = useState(false)
   const [showInference, setShowInference] = useState(false)
+  const [isImageLoading, setIsImageLoading] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
+  const scaleRef = useRef(1)
+
+  useEffect(() => {
+    scaleRef.current = scale
+  }, [scale])
 
   // ── Load patches / classes / annotations on mount ──
   useEffect(() => {
@@ -79,10 +85,15 @@ export default function AnnotatePage() {
 
   // ── Load image object ──
   useEffect(() => {
-    if (!imageUrl) { setImageObj(null); return }
+    if (!imageUrl) { setImageObj(null); setIsImageLoading(false); return }
+    setIsImageLoading(true)
     const img = new Image()
     img.crossOrigin = 'anonymous'
-    img.onload = () => setImageObj(img)
+    img.onload = () => {
+      setImageObj(img)
+      setIsImageLoading(false)
+    }
+    img.onerror = () => setIsImageLoading(false)
     img.src = imageUrl
   }, [imageUrl])
 
@@ -210,9 +221,10 @@ export default function AnnotatePage() {
       const mouseX = e.clientX - rect.left
       const mouseY = e.clientY - rect.top
 
+      const currentScale = scaleRef.current
       const delta = e.deltaY > 0 ? 0.9 : 1.1
-      const newScale = Math.min(Math.max(scale * delta, 0.3), 8)
-      const ratio = newScale / scale
+      const newScale = Math.min(Math.max(currentScale * delta, 0.3), 8)
+      const ratio = newScale / currentScale
 
       setOffset(prev => ({
         x: prev.x + (mouseX - rect.width / 2) * (1 - ratio),
@@ -223,7 +235,7 @@ export default function AnnotatePage() {
 
     container.addEventListener('wheel', handleWheel, { passive: false })
     return () => container.removeEventListener('wheel', handleWheel)
-  }, [scale])
+  }, [imageUrl])
 
   // ── Coordinate mapping ──
   const screenToImage = useCallback((clientX: number, clientY: number) => {
@@ -285,16 +297,20 @@ export default function AnnotatePage() {
 
     const isNegative = e.shiftKey || e.button === 2
     const newPoint: PromptPoint = { x: pos.x, y: pos.y, label: isNegative ? 0 : 1 }
-    const nextPoints = [...points, newPoint]
-    setPoints(nextPoints)
+
+    let nextPoints: PromptPoint[]
+    setPoints(prev => {
+      nextPoints = [...prev, newPoint]
+      return nextPoints
+    })
 
     store.setIsLoadingMask(true)
     try {
       const embeddingId = `${store.selectedPatch.patch_id}_${store.selectedMonth}`
       const result = await segmentWithSAM(
         embeddingId,
-        nextPoints.map(p => [p.x, p.y]),
-        nextPoints.map(p => p.label),
+        nextPoints!.map(p => [p.x, p.y]),
+        nextPoints!.map(p => p.label),
         true
       )
       store.setMaskCandidates(result.masks_b64.map((b64, i) => ({
@@ -562,6 +578,18 @@ export default function AnnotatePage() {
                     ref={canvasRef}
                     className="w-full h-full block"
                   />
+
+                  {/* Loading overlay */}
+                  {(isImageLoading || store.isLoadingMask) && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-20 pointer-events-none">
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
+                        <span className="text-sm text-slate-500">
+                          {isImageLoading ? '影像加载中...' : 'SAM 分割中...'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
