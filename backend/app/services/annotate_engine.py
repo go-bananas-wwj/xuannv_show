@@ -160,6 +160,15 @@ class SAM3Client:
                 enable_inst_interactivity=True,
             )
             self._model.to(device)
+            # SAM3 checkpoint has mixed dtypes (some bfloat16, some float32).
+            # The model uses @torch.autocast which expects uniform bfloat16 inputs/weights.
+            # Convert all float32 params/buffers to bfloat16 to avoid dtype mismatch.
+            for p in self._model.parameters():
+                if p.dtype == torch.float32:
+                    p.data = p.data.to(torch.bfloat16)
+            for b in self._model.buffers():
+                if b.dtype == torch.float32:
+                    b.data = b.data.to(torch.bfloat16)
             self._processor = Sam3Processor(self._model, device=device)
             print("[SAM3Client] SAM3 model loaded.")
 

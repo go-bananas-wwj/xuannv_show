@@ -151,6 +151,11 @@ export default function AnnotatePage() {
     // Base image
     ctx.drawImage(imageObj, drawX, drawY, imgW * scale, imgH * scale)
 
+    // Image border (helps users see where the image is)
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)'
+    ctx.lineWidth = 1
+    ctx.strokeRect(drawX, drawY, imgW * scale, imgH * scale)
+
     // Mask preview overlay
     const maskImg = maskObjs[store.selectedMaskIndex]
     if (maskImg) {
@@ -261,6 +266,7 @@ export default function AnnotatePage() {
 
   // ── Mouse handlers ──
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Pan: middle-click or space+left-click
     if (e.button === 1 || (isSpacePressed && e.button === 0)) {
       setIsPanning(true)
       setPanStart({
@@ -272,7 +278,41 @@ export default function AnnotatePage() {
       e.preventDefault()
       return
     }
-  }, [isSpacePressed, offset])
+
+    // Click to add point (LabelMe style: onMouseDown for instant response)
+    if (mode !== 'create') return
+    if (!store.selectedPatch || !store.isEmbeddingReady) return
+    if (e.button !== 0 && e.button !== 2) return
+
+    const pos = screenToImage(e.clientX, e.clientY)
+    if (!pos) return
+
+    const isNegative = e.shiftKey || e.button === 2
+    const newPoint: PromptPoint = { x: pos.x, y: pos.y, label: isNegative ? 0 : 1 }
+
+    setPoints(prev => {
+      const next = [...prev, newPoint]
+      // Trigger SAM asynchronously with the updated points
+      const embeddingId = `${store.selectedPatch!.patch_id}_${store.selectedMonth}`
+      store.setIsLoadingMask(true)
+      segmentWithSAM(
+        embeddingId,
+        next.map(p => [p.x, p.y]),
+        next.map(p => p.label),
+        true
+      ).then(result => {
+        store.setMaskCandidates(result.masks_b64.map((b64, i) => ({
+          mask_b64: b64,
+          score: result.scores[i],
+        })))
+      }).catch(err => {
+        console.error('SAM segmentation failed:', err)
+      }).finally(() => {
+        store.setIsLoadingMask(false)
+      })
+      return next
+    })
+  }, [isSpacePressed, offset, mode, store.selectedPatch, store.selectedMonth, store.isEmbeddingReady, screenToImage])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (isPanning) {
@@ -285,44 +325,6 @@ export default function AnnotatePage() {
   const handleMouseUp = useCallback(() => {
     setIsPanning(false)
   }, [])
-
-  // ── Canvas click for SAM segmentation ──
-  const handleCanvasClick = useCallback(async (e: React.MouseEvent) => {
-    if (isPanning || mode !== 'create') return
-    if (!store.selectedPatch || !store.isEmbeddingReady) return
-    if (e.button !== 0 && e.button !== 2) return
-
-    const pos = screenToImage(e.clientX, e.clientY)
-    if (!pos) return
-
-    const isNegative = e.shiftKey || e.button === 2
-    const newPoint: PromptPoint = { x: pos.x, y: pos.y, label: isNegative ? 0 : 1 }
-
-    let nextPoints: PromptPoint[]
-    setPoints(prev => {
-      nextPoints = [...prev, newPoint]
-      return nextPoints
-    })
-
-    store.setIsLoadingMask(true)
-    try {
-      const embeddingId = `${store.selectedPatch.patch_id}_${store.selectedMonth}`
-      const result = await segmentWithSAM(
-        embeddingId,
-        nextPoints!.map(p => [p.x, p.y]),
-        nextPoints!.map(p => p.label),
-        true
-      )
-      store.setMaskCandidates(result.masks_b64.map((b64, i) => ({
-        mask_b64: b64,
-        score: result.scores[i],
-      })))
-    } catch (err) {
-      console.error('SAM segmentation failed:', err)
-    } finally {
-      store.setIsLoadingMask(false)
-    }
-  }, [store.selectedPatch, store.selectedMonth, store.isEmbeddingReady, points, isPanning, mode, screenToImage])
 
   // ── Annotation actions ──
   const handleSaveAnnotation = useCallback(async () => {
@@ -571,8 +573,7 @@ export default function AnnotatePage() {
                   onMouseMove={handleMouseMove}
                   onMouseUp={handleMouseUp}
                   onMouseLeave={handleMouseUp}
-                  onClick={handleCanvasClick}
-                  onContextMenu={(e) => { e.preventDefault(); handleCanvasClick(e as any) }}
+                  onContextMenu={(e) => e.preventDefault()}
                 >
                   <canvas
                     ref={canvasRef}
