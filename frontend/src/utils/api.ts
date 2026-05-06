@@ -4,6 +4,7 @@ import type { PatchMeta, AgentTaskRequest, AgentTaskResponse, EmbeddingPreview, 
 const api = axios.create({
   baseURL: '/api',
   timeout: 30000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -118,22 +119,39 @@ export async function deleteClass(id: string): Promise<void> {
 }
 
 // Annotations CRUD
+export interface GeometryMask {
+  type: 'mask'
+  mask_b64: string
+}
+
+export interface GeometryPolygon {
+  type: 'polygon'
+  points: Array<[number, number]>
+}
+
+export interface GeometryPolyline {
+  type: 'polyline'
+  points: Array<[number, number]>
+}
+
+export type Geometry = GeometryMask | GeometryPolygon | GeometryPolyline
+
 export interface Annotation {
   id: string
   patch_id: string
   month: string
   class_id: string
-  mask_b64: string
   score: number
   created_at: string
+  geometry: Geometry
 }
 
 export interface AnnotationCreate {
   patch_id: string
   month: string
   class_id: string
-  mask_b64: string
   score: number
+  geometry: Geometry
 }
 
 export async function fetchAnnotations(): Promise<Annotation[]> {
@@ -183,6 +201,106 @@ export async function inferWithCustomModel(
     patch_id: patchId,
     month,
   })
+  return data
+}
+
+// ── Models (Classification Heads) ──
+
+export interface ModelInfo {
+  id: string
+  name: string
+  status: 'training' | 'completed' | 'failed'
+  created_at: string
+  completed_at: string | null
+  classes: Array<{ id: string; name: string; color: string }>
+  accuracy: number | null
+  n_samples: number | null
+  model_path: string | null
+  message: string | null
+}
+
+export async function listModels(): Promise<ModelInfo[]> {
+  const { data } = await api.get<ModelInfo[]>('/annotate/models')
+  return data
+}
+
+export async function createModel(name: string): Promise<{ model_id: string; job_id: string }> {
+  const { data } = await api.post('/annotate/models', { name })
+  return data
+}
+
+export async function getModel(modelId: string): Promise<ModelInfo> {
+  const { data } = await api.get<ModelInfo>(`/annotate/models/${modelId}`)
+  return data
+}
+
+export async function renameModel(modelId: string, name: string): Promise<void> {
+  await api.patch(`/annotate/models/${modelId}`, { name })
+}
+
+export async function deleteModel(modelId: string): Promise<void> {
+  await api.delete(`/annotate/models/${modelId}`)
+}
+
+export async function inferWithModel(
+  modelId: string,
+  patchId: string,
+  month: string
+): Promise<InferenceResult> {
+  const { data } = await api.post<InferenceResult>(`/annotate/models/${modelId}/infer`, {
+    patch_id: patchId,
+    month,
+  })
+  return data
+}
+
+export interface BatchInferResult {
+  patch_id: string
+  image_url: string
+}
+
+export async function inferBatchWithModel(
+  modelId: string,
+  patchIds: string[],
+  month: string
+): Promise<BatchInferResult[]> {
+  const { data } = await api.post<BatchInferResult[]>(`/annotate/models/${modelId}/infer_batch`, {
+    patch_ids: patchIds,
+    month,
+  })
+  return data
+}
+
+// ── Auth API ──
+
+export interface AuthUser {
+  user_id: string
+  username: string
+  role: string
+  created_at: string
+}
+
+export async function register(username: string, password: string): Promise<AuthUser> {
+  const { data } = await api.post<AuthUser>('/auth/register', { username, password })
+  return data
+}
+
+export async function login(username: string, password: string): Promise<{ status: string; user: AuthUser }> {
+  const { data } = await api.post('/auth/login', { username, password })
+  return data
+}
+
+export async function logout(): Promise<void> {
+  await api.post('/auth/logout')
+}
+
+export async function getMe(): Promise<AuthUser> {
+  const { data } = await api.get<AuthUser>('/auth/me')
+  return data
+}
+
+export async function getUsers(): Promise<AuthUser[]> {
+  const { data } = await api.get<AuthUser[]>('/auth/users')
   return data
 }
 

@@ -17,6 +17,7 @@ class DataLoader:
 
     def __init__(self) -> None:
         self._patches_meta: dict[str, list[dict]] = {}
+        self._patch_index: dict[str, dict[str, dict]] = {}  # region -> {patch_id: patch}
         self._embeddings_cache: dict[str, np.ndarray] = {}
         self._patch_ids_cache: dict[str, list[str]] = {}
 
@@ -30,17 +31,23 @@ class DataLoader:
             if meta_path.exists():
                 with open(meta_path) as f:
                     self._patches_meta[region] = json.load(f)
+                    # 同时构建 O(1) 索引
+                    self._patch_index[region] = {
+                        p.get("patch_id"): p for p in self._patches_meta[region] if p.get("patch_id")
+                    }
             else:
                 self._patches_meta[region] = []
+                self._patch_index[region] = {}
         return self._patches_meta[region]
 
     def get_patch_by_id(self, patch_id: str, region: str = "harbin") -> dict[str, Any] | None:
-        """根据 patch_id 返回单个 patch 元数据."""
-        patches = self.get_patches(region)
-        for p in patches:
-            if p.get("patch_id") == patch_id:
-                return p
-        return None
+        """根据 patch_id 返回单个 patch 元数据（O(1) 索引查找）."""
+        # 优先从索引查找，若索引未初始化则先加载
+        if region in self._patch_index:
+            return self._patch_index[region].get(patch_id)
+        # fallback：触发加载
+        self.get_patches(region)
+        return self._patch_index[region].get(patch_id)
 
     def get_embedding_preview_path(
         self, patch_id: str, region: str = "harbin", version: str = "v2"

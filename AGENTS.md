@@ -39,11 +39,11 @@
 | FastAPI | 0.115.0 | 主框架 |
 | Uvicorn | 0.32.0 | ASGI 服务器 |
 | NumPy | 1.26.4 | — |
-| Pillow | 11.0.0 | 图像处理 |
+| Pillow | 12.2.0 | 图像处理 |
 | rasterio | 1.4.2 | 栅格数据读写 |
 | pydantic | 2.9.2 | 数据校验 |
 | matplotlib | 3.9.0 | 矩阵缩略图渲染 |
-| PyTorch | — | ChangeDetectionHeadV3 推理（运行时依赖，未写入 requirements.txt） |
+| PyTorch | 2.5.1+cu124 | ChangeDetectionHeadV3 / SAM3 推理（运行时依赖，未写入 requirements.txt） |
 | scikit-learn | — | Linear Probe 推理 + Embedding PCA（运行时依赖） |
 | joblib | — | 加载 `.pkl` 模型（运行时依赖） |
 | pyproj | — | 坐标转换（运行时依赖，environment.yml 已包含） |
@@ -176,6 +176,23 @@ cd frontend && npm run dev        # http://localhost:5173
 cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 # http://localhost:8000/health  健康检查
 ```
+
+### 服务保活（看门狗）
+
+```bash
+# 一键启动前后端 + 看门狗（推荐）
+./scripts/start_services.sh
+
+# 单独启动看门狗（看门狗会自动拉起前后端）
+conda run -n xuannv nohup python scripts/watchdog.py > /tmp/xuannv_watchdog.log 2>&1 &
+```
+
+看门狗功能：
+- 每 **10 秒** 检查一次前后端进程与端口健康状态
+- 进程崩溃或端口不可用时**自动重启**对应服务
+- 日志：`/tmp/xuannv_watchdog.log`
+- 前端日志：`/tmp/xuannv_watchdog_frontend.log`
+- 后端日志：`/tmp/xuannv_watchdog_backend.log`
 
 ### 构建与部署
 

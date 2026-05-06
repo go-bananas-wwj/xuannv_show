@@ -14,15 +14,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 
 # ── Paths ──
-ANNOTATIONS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "user_annotations"
-CLASSES_PATH = ANNOTATIONS_DIR / "classes.json"
-ANNOTATIONS_INDEX_PATH = ANNOTATIONS_DIR / "annotations.json"
-MASKS_DIR = ANNOTATIONS_DIR / "masks"
-MODELS_DIR = ANNOTATIONS_DIR / "models"
-RESULTS_DIR = ANNOTATIONS_DIR / "results"
+BASE_ANNOTATIONS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "user_annotations"
 
-for d in [ANNOTATIONS_DIR, MASKS_DIR, MODELS_DIR, RESULTS_DIR]:
+
+def _get_user_dir(user_id: str) -> Path:
+    """获取某用户的 annotations 目录，不存在则自动创建."""
+    d = BASE_ANNOTATIONS_DIR / user_id
     d.mkdir(parents=True, exist_ok=True)
+    return d
 
 EMBEDDING_DIR = Path("/workspace/raw/xuannv_modelscope_upload/embeddings/v5_mixed_scale/monthly_embeddings_2025")
 RAW_DIR = Path("/workspace/raw/xuannv_modelscope_upload/raw_data")
@@ -42,8 +41,11 @@ def _base64_to_mask(b64_str: str) -> np.ndarray:
 
 
 def _mask_to_base64_png(mask: np.ndarray) -> str:
-    """Encode binary mask to base64 PNG string."""
-    img = Image.fromarray((mask.astype(np.uint8) * 255))
+    """Encode binary mask to base64 RGBA PNG string with transparent background."""
+    h, w = mask.shape
+    rgba = np.zeros((h, w, 4), dtype=np.uint8)
+    rgba[mask > 0] = [255, 255, 255, 255]  # White, fully opaque
+    img = Image.fromarray(rgba, mode="RGBA")
     buf = BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode("utf-8")
@@ -99,14 +101,27 @@ class AnnotationStore:
         self.index_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def list_annotations(self) -> list[dict]:
-        return self._load()
+        data = self._load()
+        for ann in data:
+            if "geometry" not in ann:
+                # Backward compatibility: wrap old-format mask_b64 into geometry
+                ann["geometry"] = {"type": "mask", "mask_b64": ann.pop("mask_b64", "")}
+        return data
 
-    def create_annotation(self, patch_id: str, month: str, class_id: str, mask_b64: str, score: float) -> dict:
+    def create_annotation(self, patch_id: str, month: str, class_id: str, score: float, geometry: dict) -> dict:
         ann_id = f"ann_{uuid.uuid4().hex[:8]}"
         mask_path = self.masks_dir / f"{ann_id}.npz"
 
-        # Decode base64 PNG and save mask
-        mask = _base64_to_mask(mask_b64)
+        geom_type = geometry.get("type", "mask")
+        if geom_type == "mask":
+            mask = _base64_to_mask(geometry["mask_b64"])
+        elif geom_type == "polygon":
+            mask = self._rasterize_polygon(geometry["points"])
+        elif geom_type == "polyline":
+            mask = self._rasterize_polyline(geometry["points"])
+        else:
+            raise ValueError(f"Unknown geometry type: {geom_type}")
+
         np.savez_compressed(mask_path, mask=mask)
 
         ann = {
@@ -114,14 +129,36 @@ class AnnotationStore:
             "patch_id": patch_id,
             "month": month,
             "class_id": class_id,
-            "mask_b64": mask_b64,
             "score": score,
+            "geometry": geometry,
             "created_at": datetime.now().isoformat(),
         }
         data = self._load()
         data.append(ann)
         self._save(data)
         return ann
+
+    @staticmethod
+    def _rasterize_polygon(points: list[list[float]], size: int = 256) -> np.ndarray:
+        """Rasterize normalized polygon points to binary mask."""
+        from PIL import ImageDraw
+        img = Image.new("L", (size, size), 0)
+        draw = ImageDraw.Draw(img)
+        coords = [(x * size, y * size) for x, y in points]
+        if len(coords) >= 3:
+            draw.polygon(coords, fill=255)
+        return np.array(img) > 0
+
+    @staticmethod
+    def _rasterize_polyline(points: list[list[float]], size: int = 256, width: int = 3) -> np.ndarray:
+        """Rasterize normalized polyline points to binary mask."""
+        from PIL import ImageDraw
+        img = Image.new("L", (size, size), 0)
+        draw = ImageDraw.Draw(img)
+        coords = [(x * size, y * size) for x, y in points]
+        if len(coords) >= 2:
+            draw.line(coords, fill=255, width=width)
+        return np.array(img) > 0
 
     def delete_annotation(self, ann_id: str) -> None:
         data = self._load()
@@ -133,23 +170,38 @@ class AnnotationStore:
 
 
 # ── SAM3 Client ──
+import threading
+
+# SAM3 模型加载全局锁，防止并发请求重复加载导致 OOM
+_SAM3_MODEL_LOCK = threading.Lock()
+
+
 class SAM3Client:
     """Inline SAM3 client using local model (no HTTP microservice needed)."""
 
-    def __init__(self) -> None:
-        self._temp_dir = ANNOTATIONS_DIR / "temp_images"
-        self._temp_dir.mkdir(exist_ok=True)
+    def __init__(self, user_id: str = "default") -> None:
+        self._user_id = user_id
+        self._temp_dir = BASE_ANNOTATIONS_DIR / user_id / "temp_images"
+        self._temp_dir.mkdir(parents=True, exist_ok=True)
         self._model = None
         self._processor = None
         self._cache: dict[str, dict] = {}
+        self._device: str | None = None
 
     def _ensure_model(self):
-        if self._model is None:
+        if self._model is not None:
+            return
+        # 双检锁：避免多个并发请求同时进入耗时加载
+        with _SAM3_MODEL_LOCK:
+            if self._model is not None:
+                return
             import torch
             from sam3.model_builder import build_sam3_image_model
             from sam3.model.sam3_image_processor import Sam3Processor
 
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+            # 动态选择最空闲的 GPU（与 task_engine.py 保持一致）
+            device = self._get_freest_device()
+            self._device = device
             print(f"[SAM3Client] Loading SAM3 model on {device}...")
             checkpoint_path = "/workspace/models/facebook/sam3/sam3.pt"
             bpe_path = "/workspace/xuannv_show/backend/sam3/sam3/assets/bpe_simple_vocab_16e6.txt.gz"
@@ -171,6 +223,33 @@ class SAM3Client:
                     b.data = b.data.to(torch.bfloat16)
             self._processor = Sam3Processor(self._model, device=device)
             print("[SAM3Client] SAM3 model loaded.")
+
+    @staticmethod
+    def _get_freest_device() -> str:
+        """选择显存最空闲的 CUDA 设备，无 GPU 时回退到 CPU."""
+        import torch
+        if not torch.cuda.is_available():
+            return "cpu"
+        # 优先使用 gpu6（业务约束），但检查是否可用
+        if torch.cuda.device_count() > 6:
+            mem_free, _ = torch.cuda.mem_get_info(6)
+            if mem_free > 2 * 1024**3:  # 至少 2GB 空闲
+                return "cuda:6"
+        # fallback：选显存最空闲的
+        best_device = 0
+        best_free = 0
+        for i in range(torch.cuda.device_count()):
+            mem_free, _ = torch.cuda.mem_get_info(i)
+            if mem_free > best_free:
+                best_free = mem_free
+                best_device = i
+        return f"cuda:{best_device}"
+
+    def warmup(self) -> None:
+        """服务启动时预热 SAM3 模型，避免首次请求时用户等待."""
+        print("[SAM3Client] Warming up...")
+        self._ensure_model()
+        print("[SAM3Client] Warmup done.")
 
     def _load_s2_image(self, patch_id: str, month: str) -> Path:
         """Load S2 image for a patch and save as temporary PNG for SAM3."""
@@ -214,10 +293,12 @@ class SAM3Client:
 
     def preload_image(self, patch_id: str, month: str, embedding_id: str) -> None:
         """Precompute SAM3 image embedding."""
+        import torch
         self._ensure_model()
         image_path = self._load_s2_image(patch_id, month)
         image = Image.open(image_path).convert("RGB")
-        state = self._processor.set_image(image)
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            state = self._processor.set_image(image)
         self._cache[embedding_id] = {
             "state": state,
             "shape": (state["original_height"], state["original_width"]),
@@ -242,12 +323,14 @@ class SAM3Client:
         coords = np.array(point_coords) * np.array([[img_w, img_h]])
         labels = np.array(point_labels)
 
-        masks, scores, logits = self._model.predict_inst(
-            state,
-            point_coords=coords,
-            point_labels=labels,
-            multimask_output=multimask_output,
-        )
+        import torch
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            masks, scores, logits = self._model.predict_inst(
+                state,
+                point_coords=coords,
+                point_labels=labels,
+                multimask_output=multimask_output,
+            )
 
         # masks shape: (N, H, W), scores: (N,)
         masks_b64 = [_mask_to_base64_png(mask) for mask in masks]
@@ -255,12 +338,91 @@ class SAM3Client:
 
 
 # ── Training Engine ──
+class ModelRegistry:
+    """Persistent registry for trained classification heads."""
+
+    def __init__(self, index_path: Path) -> None:
+        self._path = index_path
+        self._data: list[dict] = []
+        self._load()
+
+    def _load(self) -> None:
+        if self._path.exists():
+            try:
+                with open(self._path) as f:
+                    self._data = json.load(f)
+                if not isinstance(self._data, list):
+                    self._data = []
+            except Exception:
+                self._data = []
+
+    def _save(self) -> None:
+        tmp = self._path.with_suffix(".tmp")
+        with open(tmp, "w") as f:
+            json.dump(self._data, f, ensure_ascii=False, indent=2)
+        tmp.rename(self._path)
+
+    def list_models(self) -> list[dict]:
+        return sorted(self._data, key=lambda m: m.get("created_at", ""), reverse=True)
+
+    def get_model(self, model_id: str) -> dict | None:
+        for m in self._data:
+            if m.get("id") == model_id:
+                return m
+        return None
+
+    def create_model(self, name: str, classes: list[dict]) -> str:
+        model_id = f"model_{uuid.uuid4().hex[:8]}"
+        record = {
+            "id": model_id,
+            "name": name,
+            "status": "training",
+            "created_at": datetime.now().isoformat(),
+            "completed_at": None,
+            "classes": classes,
+            "accuracy": None,
+            "n_samples": None,
+            "model_path": str(MODELS_DIR / f"{model_id}.pkl"),
+            "message": None,
+        }
+        self._data.append(record)
+        self._save()
+        return model_id
+
+    def update_model(self, model_id: str, **kwargs) -> bool:
+        for m in self._data:
+            if m.get("id") == model_id:
+                m.update(kwargs)
+                self._save()
+                return True
+        return False
+
+    def rename_model(self, model_id: str, name: str) -> bool:
+        return self.update_model(model_id, name=name)
+
+    def delete_model(self, model_id: str) -> bool:
+        record = self.get_model(model_id)
+        if record is None:
+            return False
+        # Delete pkl file
+        pkl_path = Path(record.get("model_path", ""))
+        if pkl_path.exists():
+            pkl_path.unlink()
+        self._data = [m for m in self._data if m.get("id") != model_id]
+        self._save()
+        return True
+
+
 class TrainingEngine:
     """Train Linear Probe using user annotations."""
 
-    def train(self) -> dict:
-        store = get_annotation_store()
-        mgr = get_class_manager()
+    def __init__(self, user_id: str = "default") -> None:
+        self._user_id = user_id
+        self._user_dir = _get_user_dir(user_id)
+
+    def train(self, model_id: str) -> dict:
+        store = get_annotation_store(self._user_id)
+        mgr = get_class_manager(self._user_id)
         annotations = store.list_annotations()
         classes = {c["id"]: c for c in mgr.list_classes()}
 
@@ -338,11 +500,16 @@ class TrainingEngine:
             "class_ids": list(classes.keys()),
             "trained_at": datetime.now().isoformat(),
         }
-        model_path = MODELS_DIR / f"user_classifier_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+        registry = get_model_registry(self._user_id)
+        record = registry.get_model(model_id)
+        if record is None:
+            raise ValueError(f"Model {model_id} not found in registry")
+        model_path = Path(record["model_path"])
         joblib.dump(model_data, model_path)
 
         accuracy = float(clf.score(X_scaled, y_train))
         return {
+            "model_id": model_id,
             "model_path": str(model_path),
             "accuracy": accuracy,
             "n_samples": len(y_train),
@@ -353,24 +520,31 @@ class TrainingEngine:
 class InferenceEngine:
     """Run inference with user-trained model."""
 
-    def __init__(self) -> None:
-        self.results_dir = RESULTS_DIR
+    def __init__(self, user_id: str = "default") -> None:
+        self._user_id = user_id
+        self.results_dir = _get_user_dir(user_id) / "results"
         self.results_dir.mkdir(parents=True, exist_ok=True)
-        self._model_data: dict | None = None
+        self._cache: dict[str, dict] = {}
 
-    def _load_latest_model(self) -> dict:
-        if self._model_data is not None:
-            return self._model_data
+    def _load_model(self, model_id: str) -> dict:
+        if model_id in self._cache:
+            return self._cache[model_id]
 
-        models = sorted(MODELS_DIR.glob("user_classifier_*.pkl"))
-        if not models:
-            raise ValueError("No trained model found")
+        registry = get_model_registry(self._user_id)
+        record = registry.get_model(model_id)
+        if record is None:
+            raise ValueError(f"Model {model_id} not found")
 
-        self._model_data = joblib.load(models[-1])
-        return self._model_data
+        model_path = Path(record["model_path"])
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
 
-    def infer(self, patch_id: str, month: str) -> str:
-        model_data = self._load_latest_model()
+        model_data = joblib.load(model_path)
+        self._cache[model_id] = model_data
+        return model_data
+
+    def infer(self, model_id: str, patch_id: str, month: str) -> str:
+        model_data = self._load_model(model_id)
         scaler = model_data["scaler"]
         clf = model_data["model"]
         classes = model_data["classes"]
@@ -395,49 +569,54 @@ class InferenceEngine:
         # Resize to 256x256 for display
         img = Image.fromarray(rgb).resize((256, 256), Image.Resampling.NEAREST)
 
-        result_path = self.results_dir / f"infer_{patch_id}_{month}.png"
+        result_path = self.results_dir / f"infer_{model_id}_{patch_id}_{month}.png"
         img.save(result_path)
         return str(result_path)
 
 
-# ── Singletons ──
-_class_manager: ClassManager | None = None
-_annotation_store: AnnotationStore | None = None
-_sam3_client: SAM3Client | None = None
-_training_engine: TrainingEngine | None = None
-_inference_engine: InferenceEngine | None = None
+# ── Per-User Singletons ──
+_user_class_managers: dict[str, ClassManager] = {}
+_user_annotation_stores: dict[str, AnnotationStore] = {}
+_user_sam3_clients: dict[str, SAM3Client] = {}
+_user_training_engines: dict[str, TrainingEngine] = {}
+_user_inference_engines: dict[str, InferenceEngine] = {}
+_user_model_registries: dict[str, ModelRegistry] = {}
 
 
-def get_class_manager() -> ClassManager:
-    global _class_manager
-    if _class_manager is None:
-        _class_manager = ClassManager(CLASSES_PATH)
-    return _class_manager
+def get_class_manager(user_id: str = "default") -> ClassManager:
+    if user_id not in _user_class_managers:
+        user_dir = _get_user_dir(user_id)
+        _user_class_managers[user_id] = ClassManager(user_dir / "classes.json")
+    return _user_class_managers[user_id]
 
 
-def get_annotation_store() -> AnnotationStore:
-    global _annotation_store
-    if _annotation_store is None:
-        _annotation_store = AnnotationStore(ANNOTATIONS_INDEX_PATH, MASKS_DIR)
-    return _annotation_store
+def get_annotation_store(user_id: str = "default") -> AnnotationStore:
+    if user_id not in _user_annotation_stores:
+        user_dir = _get_user_dir(user_id)
+        _user_annotation_stores[user_id] = AnnotationStore(user_dir / "annotations.json", user_dir / "masks")
+    return _user_annotation_stores[user_id]
 
 
-def get_sam3_client() -> SAM3Client:
-    global _sam3_client
-    if _sam3_client is None:
-        _sam3_client = SAM3Client()
-    return _sam3_client
+def get_sam3_client(user_id: str = "default") -> SAM3Client:
+    if user_id not in _user_sam3_clients:
+        _user_sam3_clients[user_id] = SAM3Client(user_id)
+    return _user_sam3_clients[user_id]
 
 
-def get_training_engine() -> TrainingEngine:
-    global _training_engine
-    if _training_engine is None:
-        _training_engine = TrainingEngine()
-    return _training_engine
+def get_training_engine(user_id: str = "default") -> TrainingEngine:
+    if user_id not in _user_training_engines:
+        _user_training_engines[user_id] = TrainingEngine(user_id)
+    return _user_training_engines[user_id]
 
 
-def get_inference_engine() -> InferenceEngine:
-    global _inference_engine
-    if _inference_engine is None:
-        _inference_engine = InferenceEngine()
-    return _inference_engine
+def get_inference_engine(user_id: str = "default") -> InferenceEngine:
+    if user_id not in _user_inference_engines:
+        _user_inference_engines[user_id] = InferenceEngine(user_id)
+    return _user_inference_engines[user_id]
+
+
+def get_model_registry(user_id: str = "default") -> ModelRegistry:
+    if user_id not in _user_model_registries:
+        user_dir = _get_user_dir(user_id)
+        _user_model_registries[user_id] = ModelRegistry(user_dir / "models_index.json")
+    return _user_model_registries[user_id]

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
 
 from app.services.annotate_engine import (
@@ -14,7 +14,9 @@ from app.services.annotate_engine import (
     get_sam3_client,
     get_training_engine,
     get_inference_engine,
+    get_model_registry,
 )
+from app.services.user_service import get_current_user
 
 router = APIRouter(prefix="/annotate", tags=["annotate"])
 
@@ -30,18 +32,18 @@ class ClassOut(BaseModel):
     color: str
 
 @router.get("/classes", response_model=list[ClassOut])
-def list_classes() -> list[dict]:
-    mgr = get_class_manager()
+def list_classes(user: dict = Depends(get_current_user)) -> list[dict]:
+    mgr = get_class_manager(user["user_id"])
     return mgr.list_classes()
 
 @router.post("/classes", response_model=ClassOut)
-def create_class(req: ClassCreate) -> dict:
-    mgr = get_class_manager()
+def create_class(req: ClassCreate, user: dict = Depends(get_current_user)) -> dict:
+    mgr = get_class_manager(user["user_id"])
     return mgr.create_class(req.name, req.color)
 
 @router.delete("/classes/{class_id}")
-def delete_class(class_id: str) -> dict:
-    mgr = get_class_manager()
+def delete_class(class_id: str, user: dict = Depends(get_current_user)) -> dict:
+    mgr = get_class_manager(user["user_id"])
     mgr.delete_class(class_id)
     return {"status": "ok"}
 
@@ -56,8 +58,8 @@ class EmbedResponse(BaseModel):
     status: str
 
 @router.post("/sam/embed", response_model=EmbedResponse)
-def sam_embed(req: EmbedRequest) -> dict:
-    client = get_sam3_client()
+def sam_embed(req: EmbedRequest, user: dict = Depends(get_current_user)) -> dict:
+    client = get_sam3_client(user["user_id"])
     embedding_id = f"{req.patch_id}_{req.month}"
     client.preload_image(req.patch_id, req.month, embedding_id)
     return {"embedding_id": embedding_id, "status": "ok"}
@@ -73,8 +75,8 @@ class SegmentResponse(BaseModel):
     scores: list[float]
 
 @router.post("/sam/segment", response_model=SegmentResponse)
-def sam_segment(req: SegmentRequest) -> dict:
-    client = get_sam3_client()
+def sam_segment(req: SegmentRequest, user: dict = Depends(get_current_user)) -> dict:
+    client = get_sam3_client(user["user_id"])
     masks_b64, scores = client.predict(
         req.embedding_id,
         req.point_coords,
@@ -85,42 +87,123 @@ def sam_segment(req: SegmentRequest) -> dict:
 
 # ── Annotations ──
 
+class GeometryMask(BaseModel):
+    type: str
+    mask_b64: str
+
+class GeometryPolygon(BaseModel):
+    type: str
+    points: list[list[float]]
+
+class GeometryPolyline(BaseModel):
+    type: str
+    points: list[list[float]]
+
 class AnnotationCreate(BaseModel):
     patch_id: str
     month: str
     class_id: str
-    mask_b64: str
     score: float
+    geometry: GeometryMask | GeometryPolygon | GeometryPolyline
 
 class AnnotationOut(BaseModel):
     id: str
     patch_id: str
     month: str
     class_id: str
-    mask_b64: str
     score: float
     created_at: str
+    geometry: GeometryMask | GeometryPolygon | GeometryPolyline
 
 @router.get("/annotations", response_model=list[AnnotationOut])
-def list_annotations() -> list[dict]:
-    store = get_annotation_store()
+def list_annotations(user: dict = Depends(get_current_user)) -> list[dict]:
+    store = get_annotation_store(user["user_id"])
     return store.list_annotations()
 
 @router.post("/annotations", response_model=AnnotationOut)
-def create_annotation(req: AnnotationCreate) -> dict:
-    store = get_annotation_store()
+def create_annotation(req: AnnotationCreate, user: dict = Depends(get_current_user)) -> dict:
+    mgr = get_class_manager(user["user_id"])
+    classes = mgr.list_classes()
+    if req.class_id not in {c["id"] for c in classes}:
+        raise HTTPException(status_code=400, detail="Class not found. Please create a class first.")
+    store = get_annotation_store(user["user_id"])
     return store.create_annotation(
         patch_id=req.patch_id,
         month=req.month,
         class_id=req.class_id,
-        mask_b64=req.mask_b64,
         score=req.score,
+        geometry=req.geometry.model_dump(),
     )
 
 @router.delete("/annotations/{ann_id}")
-def delete_annotation(ann_id: str) -> dict:
-    store = get_annotation_store()
+def delete_annotation(ann_id: str, user: dict = Depends(get_current_user)) -> dict:
+    store = get_annotation_store(user["user_id"])
     store.delete_annotation(ann_id)
+    return {"status": "ok"}
+
+# ── Models (Classification Heads) ──
+
+class ModelCreateRequest(BaseModel):
+    name: str
+
+class ModelRenameRequest(BaseModel):
+    name: str
+
+class ModelOut(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    id: str
+    name: str
+    status: str
+    created_at: str
+    completed_at: str | None
+    classes: list[dict]
+    accuracy: float | None
+    n_samples: int | None
+    model_path: str | None
+    message: str | None
+
+@router.get("/models", response_model=list[ModelOut])
+def list_models(user: dict = Depends(get_current_user)) -> list[dict]:
+    registry = get_model_registry(user["user_id"])
+    return registry.list_models()
+
+@router.post("/models")
+def create_model(req: ModelCreateRequest, background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    registry = get_model_registry(user["user_id"])
+    mgr = get_class_manager(user["user_id"])
+    classes = mgr.list_classes()
+    model_id = registry.create_model(req.name, classes)
+    job_id = str(uuid.uuid4())[:8]
+    _training_jobs[job_id] = {
+        "job_id": job_id,
+        "model_id": model_id,
+        "status": "running",
+        "user_id": user["user_id"],
+        "started_at": datetime.now().isoformat(),
+    }
+    background_tasks.add_task(_do_training, job_id, model_id, user["user_id"])
+    return {"model_id": model_id, "job_id": job_id}
+
+@router.get("/models/{model_id}", response_model=ModelOut)
+def get_model(model_id: str, user: dict = Depends(get_current_user)) -> dict:
+    registry = get_model_registry(user["user_id"])
+    model = registry.get_model(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return model
+
+@router.patch("/models/{model_id}")
+def rename_model(model_id: str, req: ModelRenameRequest, user: dict = Depends(get_current_user)) -> dict:
+    registry = get_model_registry(user["user_id"])
+    if not registry.rename_model(model_id, req.name):
+        raise HTTPException(status_code=404, detail="Model not found")
+    return {"status": "ok"}
+
+@router.delete("/models/{model_id}")
+def delete_model(model_id: str, user: dict = Depends(get_current_user)) -> dict:
+    registry = get_model_registry(user["user_id"])
+    if not registry.delete_model(model_id):
+        raise HTTPException(status_code=404, detail="Model not found")
     return {"status": "ok"}
 
 # ── Training ──
@@ -128,15 +211,22 @@ def delete_annotation(ann_id: str) -> dict:
 _training_jobs: dict[str, dict] = {}
 
 @router.post("/train")
-def train_classifier(background_tasks: BackgroundTasks) -> dict:
+def train_classifier(background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    """Deprecated: use POST /models instead."""
+    registry = get_model_registry(user["user_id"])
+    mgr = get_class_manager(user["user_id"])
+    classes = mgr.list_classes()
+    model_id = registry.create_model(f"分类头_{datetime.now().strftime('%m%d%H%M')}", classes)
     job_id = str(uuid.uuid4())[:8]
     _training_jobs[job_id] = {
         "job_id": job_id,
+        "model_id": model_id,
         "status": "running",
+        "user_id": user["user_id"],
         "started_at": datetime.now().isoformat(),
     }
-    background_tasks.add_task(_do_training, job_id)
-    return {"job_id": job_id}
+    background_tasks.add_task(_do_training, job_id, model_id, user["user_id"])
+    return {"job_id": job_id, "model_id": model_id}
 
 class TrainStatusOut(BaseModel):
     model_config = {"protected_namespaces": ()}
@@ -148,10 +238,13 @@ class TrainStatusOut(BaseModel):
     message: str | None = None
 
 @router.get("/train/{job_id}", response_model=TrainStatusOut)
-def get_train_status(job_id: str) -> dict:
+def get_train_status(job_id: str, user: dict = Depends(get_current_user)) -> dict:
     job = _training_jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    # 普通用户只能看自己的训练任务
+    if user.get("role") != "admin" and job.get("user_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     return {
         "job_id": job["job_id"],
         "status": job["status"],
@@ -161,10 +254,18 @@ def get_train_status(job_id: str) -> dict:
         "message": job.get("message"),
     }
 
-def _do_training(job_id: str) -> None:
+def _do_training(job_id: str, model_id: str, user_id: str) -> None:
     try:
-        engine = get_training_engine()
-        result = engine.train()
+        engine = get_training_engine(user_id)
+        result = engine.train(model_id)
+        registry = get_model_registry(user_id)
+        registry.update_model(
+            model_id,
+            status="completed",
+            completed_at=datetime.now().isoformat(),
+            accuracy=result["accuracy"],
+            n_samples=result["n_samples"],
+        )
         _training_jobs[job_id].update({
             "status": "completed",
             "accuracy": result["accuracy"],
@@ -172,6 +273,8 @@ def _do_training(job_id: str) -> None:
             "model_path": result["model_path"],
         })
     except Exception as e:
+        registry = get_model_registry(user_id)
+        registry.update_model(model_id, status="failed", message=str(e))
         _training_jobs[job_id].update({
             "status": "failed",
             "message": str(e),
@@ -180,21 +283,68 @@ def _do_training(job_id: str) -> None:
 # ── Inference ──
 
 class InferRequest(BaseModel):
+    model_config = {"protected_namespaces": ()}
     patch_id: str
     month: str
+    model_id: str | None = None
 
 class InferResponse(BaseModel):
     image_url: str
 
 @router.post("/infer", response_model=InferResponse)
-def infer(req: InferRequest) -> dict:
-    engine = get_inference_engine()
-    image_path = engine.infer(req.patch_id, req.month)
+def infer(req: InferRequest, user: dict = Depends(get_current_user)) -> dict:
+    engine = get_inference_engine(user["user_id"])
+    if req.model_id:
+        image_path = engine.infer(req.model_id, req.patch_id, req.month)
+    else:
+        # Fallback: use latest model for backward compatibility
+        registry = get_model_registry(user["user_id"])
+        models = registry.list_models()
+        completed = [m for m in models if m["status"] == "completed"]
+        if not completed:
+            raise HTTPException(status_code=400, detail="No trained model found")
+        image_path = engine.infer(completed[0]["id"], req.patch_id, req.month)
     return {"image_url": f"/api/annotate/infer_result/{Path(image_path).name}"}
 
+class ModelInferRequest(BaseModel):
+    patch_id: str
+    month: str
+
+class BatchInferRequest(BaseModel):
+    patch_ids: list[str]
+    month: str
+
+class BatchInferResult(BaseModel):
+    patch_id: str
+    image_url: str
+
+@router.post("/models/{model_id}/infer", response_model=InferResponse)
+def infer_with_model(model_id: str, req: ModelInferRequest, user: dict = Depends(get_current_user)) -> dict:
+    engine = get_inference_engine(user["user_id"])
+    image_path = engine.infer(model_id, req.patch_id, req.month)
+    return {"image_url": f"/api/annotate/infer_result/{Path(image_path).name}"}
+
+@router.post("/models/{model_id}/infer_batch", response_model=list[BatchInferResult])
+def infer_batch_with_model(model_id: str, req: BatchInferRequest, user: dict = Depends(get_current_user)) -> list[dict]:
+    engine = get_inference_engine(user["user_id"])
+    results = []
+    for patch_id in req.patch_ids:
+        try:
+            image_path = engine.infer(model_id, patch_id, req.month)
+            results.append({
+                "patch_id": patch_id,
+                "image_url": f"/api/annotate/infer_result/{Path(image_path).name}",
+            })
+        except Exception as e:
+            results.append({
+                "patch_id": patch_id,
+                "image_url": "",
+            })
+    return results
+
 @router.get("/infer_result/{filename}")
-def get_infer_result(filename: str) -> bytes:
-    engine = get_inference_engine()
+def get_infer_result(filename: str, user: dict = Depends(get_current_user)) -> bytes:
+    engine = get_inference_engine(user["user_id"])
     image_path = engine.results_dir / filename
     if not image_path.exists():
         raise HTTPException(status_code=404, detail="Result not found")

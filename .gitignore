@@ -1,2 +1,29 @@
-.plan/\nnode_modules/\ndist/\n__pycache__/\n*.pyc\n.env\n.DS_Store\n*.log\n.vite/\n.idea/\n
+# Dependencies
+node_modules/
+dist/
+.vite/
+
+# Python
+__pycache__/
+*.pyc
+.env
+
+# IDE
+.DS_Store
+.idea/
+
+# Logs
+*.log
+
+# Runtime data (auto-generated)
+data/sessions.json
+data/users.json
+data/user_annotations/u_*/
+data/user_annotations/temp_images/
+data/user_annotations/masks/
+data/user_annotations/results/
+data/user_annotations/models/
+data/user_annotations/models_index.json
+
+# SAM3 model weights
 backend/sam3/

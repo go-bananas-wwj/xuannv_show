@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Info, LayoutGrid, Waves, Bot, Mail, Menu, X, PenTool } from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { BookOpen, Info, LayoutGrid, Waves, Bot, Mail, Menu, X, PenTool, GraduationCap, LogOut, Shield, User } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { useAuthStore } from '@/stores/authStore'
+import { logout as apiLogout } from '@/utils/api'
 
 interface NavigationProps {
   onNavigate: (
-    section: 'intro' | 'about' | 'data' | 'downstream' | 'agent' | 'contact'
+    section: 'intro' | 'about' | 'data' | 'downstream' | 'agent' | 'training' | 'contact'
   ) => void
 }
 
 export default function Navigation({ onNavigate }: NavigationProps) {
   const location = useLocation()
+  const navigate = useNavigate()
+  const auth = useAuthStore()
   const isHome = location.pathname === '/'
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -30,7 +34,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
       const scrollTop = scrollContainer === window ? window.scrollY : (scrollContainer as Element).scrollTop
       setScrolled(scrollTop > 50)
 
-      const sections = ['intro', 'about', 'data', 'downstream', 'agent', 'contact']
+      const sections = ['intro', 'about', 'data', 'downstream', 'agent', 'training', 'contact']
       for (const id of sections) {
         const el = document.getElementById(`section-${id}`)
         if (el) {
@@ -61,6 +65,7 @@ export default function Navigation({ onNavigate }: NavigationProps) {
     { id: 'data' as const, label: '数据浏览', icon: LayoutGrid },
     { id: 'downstream' as const, label: '下游任务', icon: Waves },
     { id: 'agent' as const, label: '智能体报告', icon: Bot },
+    { id: 'training' as const, label: '自定义训练', icon: GraduationCap },
     { id: 'contact' as const, label: '联系我们', icon: Mail },
   ]
 
@@ -98,18 +103,42 @@ export default function Navigation({ onNavigate }: NavigationProps) {
               {item.label}
             </button>
           ))}
-          <Link
-            to="/annotate"
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-all duration-200',
-              location.pathname === '/annotate'
-                ? 'text-sky-600 bg-sky-50 border border-sky-200'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-            )}
-          >
-            <PenTool className="w-4 h-4" />
-            自定义训练
-          </Link>
+          {!isHome && auth.isLoggedIn && auth.user && (
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1 text-xs text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded-lg">
+                <User className="w-3.5 h-3.5" />
+                {auth.user.username}
+                {auth.user.role === 'admin' && (
+                  <Shield className="w-3 h-3 text-amber-500 ml-0.5" />
+                )}
+              </span>
+              <button
+                onClick={async () => {
+                  try { await apiLogout() } catch {}
+                  auth.logout()
+                  navigate('/')
+                }}
+                className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-lg transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                登出
+              </button>
+            </div>
+          )}
+          {!isHome && !auth.isLoggedIn && (
+            <Link
+              to="/login"
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-all duration-200',
+                location.pathname === '/login'
+                  ? 'text-sky-600 bg-sky-50 border border-sky-200'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+              )}
+            >
+              <PenTool className="w-4 h-4" />
+              登录
+            </Link>
+          )}
         </div>
 
         <button

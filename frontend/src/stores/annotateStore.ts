@@ -7,14 +7,31 @@ export interface ClassDef {
   color: string
 }
 
+export interface GeometryMask {
+  type: 'mask'
+  mask_b64: string
+}
+
+export interface GeometryPolygon {
+  type: 'polygon'
+  points: Array<[number, number]>
+}
+
+export interface GeometryPolyline {
+  type: 'polyline'
+  points: Array<[number, number]>
+}
+
+export type Geometry = GeometryMask | GeometryPolygon | GeometryPolyline
+
 export interface Annotation {
   id: string
   patch_id: string
   month: string
   class_id: string
-  mask_b64: string
   score: number
   created_at: string
+  geometry: Geometry
 }
 
 export interface MaskCandidate {
@@ -78,9 +95,15 @@ export const useAnnotateStore = create<AnnotateState>((set) => ({
 
   setSelectedMonth: (month) => set({ selectedMonth: month }),
   setSelectedPatch: (patch) => set({ selectedPatch: patch, isEmbeddingReady: false, maskCandidates: [] }),
-  setClasses: (classes) => set({ classes }),
+  setClasses: (classes) => set((state) => ({
+    classes,
+    activeClassId: state.activeClassId ?? (classes.length > 0 ? classes[0].id : null),
+  })),
   addClass: (cls) => set((state) => ({ classes: [...state.classes, cls] })),
-  removeClass: (id) => set((state) => ({ classes: state.classes.filter((c) => c.id !== id) })),
+  removeClass: (id) => set((state) => ({
+    classes: state.classes.filter((c) => c.id !== id),
+    activeClassId: state.activeClassId === id ? null : state.activeClassId,
+  })),
   setActiveClassId: (id) => set({ activeClassId: id }),
   setAnnotations: (annotations) => set({ annotations }),
   addAnnotation: (ann) => set((state) => ({ annotations: [...state.annotations, ann] })),

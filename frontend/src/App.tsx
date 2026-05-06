@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
-import { useRef } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Navigation from '@/components/Navigation'
 import HeroSection from '@/sections/HeroSection'
@@ -7,8 +7,15 @@ import AboutSection from '@/sections/AboutSection'
 import DataSection from '@/sections/DataSection'
 import MonitoringSection from '@/sections/MonitoringSection'
 import AgentSection from '@/sections/AgentSection'
+import TrainingSection from '@/sections/TrainingSection'
 import ContactSection from '@/sections/ContactSection'
 import AnnotatePage from '@/pages/AnnotatePage'
+import LoginPage from '@/pages/LoginPage'
+import ModelHubPage from '@/pages/ModelHubPage'
+import ModelApplyPage from '@/pages/ModelApplyPage'
+import AuthGuard from '@/components/AuthGuard'
+import { useAuthStore } from '@/stores/authStore'
+import { getMe } from '@/utils/api'
 
 function HomePage() {
   const introRef = useRef<HTMLDivElement>(null)
@@ -16,6 +23,7 @@ function HomePage() {
   const dataRef = useRef<HTMLDivElement>(null)
   const downstreamRef = useRef<HTMLDivElement>(null)
   const agentRef = useRef<HTMLDivElement>(null)
+  const trainingRef = useRef<HTMLDivElement>(null)
   const contactRef = useRef<HTMLDivElement>(null)
 
   const scrollTo = (ref: React.RefObject<HTMLDivElement | null>) => {
@@ -34,6 +42,7 @@ function HomePage() {
           if (section === 'data') scrollTo(dataRef)
           if (section === 'downstream') scrollTo(downstreamRef)
           if (section === 'agent') scrollTo(agentRef)
+          if (section === 'training') scrollTo(trainingRef)
           if (section === 'contact') scrollTo(contactRef)
         }}
       />
@@ -94,6 +103,17 @@ function HomePage() {
       </motion.div>
 
       <motion.div
+        ref={trainingRef}
+        className="snap-start"
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        viewport={{ once: true, margin: '-100px' }}
+        transition={{ duration: 0.8 }}
+      >
+        <TrainingSection />
+      </motion.div>
+
+      <motion.div
         ref={contactRef}
         className="snap-start"
         initial={{ opacity: 0 }}
@@ -112,10 +132,29 @@ function HomePage() {
 }
 
 function AppRoutes() {
+  const auth = useAuthStore()
+
+  useEffect(() => {
+    // 页面加载时尝试恢复登录状态
+    const restore = async () => {
+      try {
+        const user = await getMe()
+        auth.login(user)
+      } catch {
+        // 未登录或 session 过期，保持未登录状态
+        auth.setLoading(false)
+      }
+    }
+    restore()
+  }, [])
+
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route path="/annotate" element={<AnnotatePage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/annotate" element={<AuthGuard><AnnotatePage /></AuthGuard>} />
+      <Route path="/models" element={<AuthGuard><ModelHubPage /></AuthGuard>} />
+      <Route path="/apply" element={<AuthGuard><ModelApplyPage /></AuthGuard>} />
       <Route path="*" element={<HomePage />} />
     </Routes>
   )
