@@ -277,6 +277,7 @@ export interface AuthUser {
   user_id: string
   username: string
   role: string
+  has_seen_tour?: boolean
   created_at: string
 }
 
@@ -302,6 +303,10 @@ export async function getMe(): Promise<AuthUser> {
 export async function getUsers(): Promise<AuthUser[]> {
   const { data } = await api.get<AuthUser[]>('/auth/users')
   return data
+}
+
+export async function markTourCompleted(): Promise<void> {
+  await api.post('/auth/tour_completed')
 }
 
 export default api

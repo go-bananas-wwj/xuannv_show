@@ -83,6 +83,7 @@ class UserService:
             "username": "admin",
             "password_hash": _hash_password("admin"),
             "role": "admin",
+            "has_seen_tour": False,
             "created_at": datetime.now().isoformat(),
         }
         self._save_users([admin])
@@ -99,6 +100,7 @@ class UserService:
             "username": username,
             "password_hash": _hash_password(password),
             "role": role,
+            "has_seen_tour": False,
             "created_at": datetime.now().isoformat(),
         }
         users.append(user)
@@ -111,20 +113,34 @@ class UserService:
         users = self._load_users()
         for u in users:
             if u["username"] == username and _verify_password(password, u["password_hash"]):
-                return {k: v for k, v in u.items() if k != "password_hash"}
+                user = {k: v for k, v in u.items() if k != "password_hash"}
+                user.setdefault("has_seen_tour", False)
+                return user
         return None
 
     def get_user_by_id(self, user_id: str) -> dict | None:
         users = self._load_users()
         for u in users:
             if u["user_id"] == user_id:
-                return {k: v for k, v in u.items() if k != "password_hash"}
+                user = {k: v for k, v in u.items() if k != "password_hash"}
+                user.setdefault("has_seen_tour", False)
+                return user
         return None
 
     def list_users(self) -> list[dict]:
         """返回所有用户列表（不含密码）."""
         users = self._load_users()
         return [{k: v for k, v in u.items() if k != "password_hash"} for u in users]
+
+    def mark_tour_completed(self, user_id: str) -> bool:
+        """标记用户已完成新手教程."""
+        users = self._load_users()
+        for u in users:
+            if u["user_id"] == user_id:
+                u["has_seen_tour"] = True
+                self._save_users(users)
+                return True
+        return False
 
 
 # ── Session Service ──

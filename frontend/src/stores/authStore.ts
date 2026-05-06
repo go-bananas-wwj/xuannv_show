@@ -5,6 +5,7 @@ export interface User {
   user_id: string
   username: string
   role: string
+  has_seen_tour?: boolean
   created_at: string
 }
 

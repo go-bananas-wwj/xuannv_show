@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowLeftCircle, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X, Hand, MousePointer2 } from 'lucide-react'
+import { ArrowLeft, ArrowLeftCircle, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X, Hand, MousePointer2, GraduationCap } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useAnnotateStore } from '@/stores/annotateStore'
+import { useTourStore } from '@/stores/tourStore'
+import { useAuthStore } from '@/stores/authStore'
+import { useAnnotateTour } from '@/hooks/useDriverTour'
 import {
   fetchPatches, preloadSAM3Embedding, segmentWithSAM,
   fetchClasses, createClass, fetchAnnotations, saveAnnotation, deleteAnnotation,
@@ -18,8 +21,44 @@ interface PromptPoint {
   label: number // 1 = positive, 0 = negative
 }
 
+const ANNOTATE_TOUR_STEPS = [
+  {
+    element: '#tour-step-classes',
+    title: '① 创建类别',
+    description: '先在这里创建标注类别（如"建筑"、"道路"、"水体"），并为每个类别选择颜色。点击右侧的 + 按钮即可添加。',
+    position: 'left' as const,
+  },
+  {
+    element: '#tour-step-drawmode',
+    title: '② 选择标注工具',
+    description: '支持三种标注方式：SAM3 智能分割（推荐）、多边形标注、折线标注。启用 SAM3 后，只需点击正负点即可自动分割目标。',
+    position: 'left' as const,
+  },
+  {
+    element: '#tour-step-canvas',
+    title: '③ 在影像上标注',
+    description: '在画布区域点击进行标注。SAM 模式下：左键=正点（要保留的区域），右键/Shift+左键=负点（要排除的区域）。Ctrl+滚轮缩放，中键/空格+拖拽平移。',
+    position: 'bottom' as const,
+  },
+  {
+    element: '#tour-step-save',
+    title: '④ 保存标注',
+    description: '完成标注后，按 A 键或点击保存按钮，将标注数据关联到当前类别。不满意可以按 R 或 Esc 取消重做。',
+    position: 'top' as const,
+  },
+  {
+    element: '#tour-step-train',
+    title: '⑤ 训练分类模型',
+    description: '积累足够标注样本后，点击"训练分类头"按钮，系统将自动训练一个专属的分类模型。训练完成后可在模型仓库中查看和应用。',
+    position: 'top' as const,
+  },
+]
+
 export default function AnnotatePage() {
   const store = useAnnotateStore()
+  const tourStore = useTourStore()
+  const authStore = useAuthStore()
+  const { startTour } = useAnnotateTour(ANNOTATE_TOUR_STEPS)
   const [patches, setPatches] = useState<PatchMeta[]>([])
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null)
@@ -78,6 +117,17 @@ export default function AnnotatePage() {
     fetchClasses().then(store.setClasses).catch(console.error)
     fetchAnnotations().then(store.setAnnotations).catch(console.error)
   }, [])
+
+  // ── Auto-start tour for new users when entering annotate view ──
+  useEffect(() => {
+    if (viewMode === 'annotate' && !tourStore.hasCompletedAnnotateTour && !tourStore.isRunning && authStore.isLoggedIn) {
+      // Delay to ensure DOM elements are rendered
+      const timer = setTimeout(() => {
+        startTour()
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [viewMode, tourStore.hasCompletedAnnotateTour, tourStore.isRunning, authStore.isLoggedIn, startTour])
 
   // ── When a patch is selected from mosaic, enter annotate mode ──
   useEffect(() => {
@@ -700,6 +750,19 @@ export default function AnnotatePage() {
               模型已训练
             </span>
           )}
+          {viewMode === 'annotate' && (
+            <button
+              onClick={() => {
+                tourStore.resetTour()
+                setTimeout(() => startTour(), 100)
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+              title="重新查看新手引导"
+            >
+              <GraduationCap className="w-3 h-3" />
+              引导
+            </button>
+          )}
         </div>
       </header>
 
@@ -833,6 +896,7 @@ export default function AnnotatePage() {
 
                   {/* Canvas container */}
                   <div
+                    id="tour-step-canvas"
                     ref={canvasContainerRef}
                     className={cn(
                       'absolute inset-0',
@@ -918,6 +982,7 @@ export default function AnnotatePage() {
                 </div>
                 <div className="flex gap-2 mt-2">
                   <button
+                    id="tour-step-save"
                     onClick={handleSaveAnnotation}
                     className="flex items-center gap-1 px-3 py-1.5 bg-sky-500 text-white text-sm rounded-lg hover:bg-sky-600"
                   >
@@ -966,6 +1031,7 @@ export default function AnnotatePage() {
             {/* Bottom action bar */}
             <div className="flex items-center gap-2 px-4 py-3 bg-white border-t border-slate-200">
               <button
+                id="tour-step-train"
                 onClick={handleTrain}
                 disabled={isTraining || store.annotations.length === 0}
                 className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-900 disabled:opacity-50"
@@ -1041,7 +1107,7 @@ export default function AnnotatePage() {
           {/* Right panel */}
           <aside className="w-72 border-l border-slate-200 bg-white flex flex-col">
             {/* SAM3 toggle & Draw mode selector */}
-            <div className="p-3 border-b border-slate-100">
+            <div id="tour-step-drawmode" className="p-3 border-b border-slate-100">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-slate-500">标注模式</span>
                 {samEnabled && store.isEmbeddingReady && (
@@ -1135,7 +1201,7 @@ export default function AnnotatePage() {
             </div>
 
             {/* Classes */}
-            <div className="p-3 border-b border-slate-100">
+            <div id="tour-step-classes" className="p-3 border-b border-slate-100">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-slate-500">自定义类别</span>
                 <button

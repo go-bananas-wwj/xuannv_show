@@ -90,3 +90,87 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Driver.js Tour Popover Custom Styles */
+.xuannv-tour-popover .driver-popover {
+  background: rgba(15, 23, 42, 0.92) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  color: #f8fafc !important;
+  max-width: 340px !important;
+  padding: 20px !important;
+  border-radius: 16px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6) !important;
+}
+
+.xuannv-tour-popover .driver-popover-title {
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  color: #fbbf24 !important;
+  margin-bottom: 10px !important;
+}
+
+.xuannv-tour-popover .driver-popover-description {
+  font-size: 14px !important;
+  line-height: 1.7 !important;
+  color: #cbd5e1 !important;
+  margin-bottom: 16px !important;
+}
+
+.xuannv-tour-popover .driver-popover-progress-text {
+  font-size: 12px !important;
+  color: #94a3b8 !important;
+  margin-bottom: 14px !important;
+}
+
+.xuannv-tour-popover .driver-popover-next-btn {
+  background: #0ea5e9 !important;
+  color: #fff !important;
+  border: none !important;
+  padding: 8px 18px !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+}
+
+.xuannv-tour-popover .driver-popover-next-btn:hover {
+  background: #0284c7 !important;
+}
+
+.xuannv-tour-popover .driver-popover-prev-btn {
+  background: transparent !important;
+  color: #94a3b8 !important;
+  border: 1px solid rgba(148, 163, 184, 0.3) !important;
+  padding: 8px 18px !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+}
+
+.xuannv-tour-popover .driver-popover-prev-btn:hover {
+  background: rgba(148, 163, 184, 0.1) !important;
+  color: #e2e8f0 !important;
+}
+
+.xuannv-tour-popover .driver-popover-close-btn {
+  background: transparent !important;
+  color: #94a3b8 !important;
+  border: none !important;
+  position: absolute !important;
+  top: 10px !important;
+  right: 10px !important;
+  padding: 6px !important;
+  cursor: pointer !important;
+}
+
+.xuannv-tour-popover .driver-popover-close-btn:hover {
+  color: #e2e8f0 !important;
+}
+
+.xuannv-tour-popover .driver-popover-arrow {
+  border-color: rgba(15, 23, 42, 0.92) !important;
+}

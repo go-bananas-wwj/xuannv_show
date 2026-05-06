@@ -37,6 +37,7 @@ from io import BytesIO
 def _base64_to_mask(b64_str: str) -> np.ndarray:
     """Decode base64 PNG to binary mask."""
     img = Image.open(BytesIO(base64.b64decode(b64_str)))
+    img = img.convert("L")
     return np.array(img) > 128
 
 
@@ -93,6 +94,7 @@ class AnnotationStore:
     def _ensure_exists(self) -> None:
         if not self.index_path.exists():
             self.index_path.write_text("[]", encoding="utf-8")
+        self.masks_dir.mkdir(parents=True, exist_ok=True)
 
     def _load(self) -> list[dict]:
         return json.loads(self.index_path.read_text(encoding="utf-8"))
@@ -341,8 +343,9 @@ class SAM3Client:
 class ModelRegistry:
     """Persistent registry for trained classification heads."""
 
-    def __init__(self, index_path: Path) -> None:
+    def __init__(self, index_path: Path, user_dir: Path) -> None:
         self._path = index_path
+        self._user_dir = user_dir
         self._data: list[dict] = []
         self._load()
 
@@ -382,7 +385,7 @@ class ModelRegistry:
             "classes": classes,
             "accuracy": None,
             "n_samples": None,
-            "model_path": str(MODELS_DIR / f"{model_id}.pkl"),
+            "model_path": str(self._user_dir / "models" / f"{model_id}.pkl"),
             "message": None,
         }
         self._data.append(record)
@@ -437,7 +440,7 @@ class TrainingEngine:
                 continue
 
             emb = np.load(emb_path)  # [D, 64, 64]
-            mask_path = MASKS_DIR / f"{ann['id']}.npz"
+            mask_path = self._user_dir / "masks" / f"{ann['id']}.npz"
             if not mask_path.exists():
                 continue
 
@@ -486,9 +489,7 @@ class TrainingEngine:
 
         clf = LogisticRegression(
             max_iter=1000,
-            multi_class=multi_class,
             solver="lbfgs",
-            n_jobs=-1,
         )
         clf.fit(X_scaled, y_train)
 
@@ -505,6 +506,7 @@ class TrainingEngine:
         if record is None:
             raise ValueError(f"Model {model_id} not found in registry")
         model_path = Path(record["model_path"])
+        model_path.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(model_data, model_path)
 
         accuracy = float(clf.score(X_scaled, y_train))
@@ -618,5 +620,5 @@ def get_inference_engine(user_id: str = "default") -> InferenceEngine:
 def get_model_registry(user_id: str = "default") -> ModelRegistry:
     if user_id not in _user_model_registries:
         user_dir = _get_user_dir(user_id)
-        _user_model_registries[user_id] = ModelRegistry(user_dir / "models_index.json")
+        _user_model_registries[user_id] = ModelRegistry(user_dir / "models_index.json", user_dir)
     return _user_model_registries[user_id]

@@ -30,6 +30,7 @@ class UserOut(BaseModel):
     user_id: str
     username: str
     role: str
+    has_seen_tour: bool = False
     created_at: str
 
 
@@ -98,3 +99,13 @@ def list_users(admin: dict = Depends(get_current_admin)) -> list[dict]:
     """管理员：获取所有用户列表."""
     svc = get_user_service()
     return svc.list_users()
+
+
+@router.post("/tour_completed")
+def mark_tour_completed(user: dict = Depends(get_current_user)) -> dict:
+    """标记当前用户已完成新手教程."""
+    svc = get_user_service()
+    success = svc.mark_tour_completed(user["user_id"])
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"status": "ok"}
