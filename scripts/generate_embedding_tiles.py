@@ -3,8 +3,8 @@
 
 Usage:
     python scripts/generate_embedding_tiles.py \
-        --embeddings-dir /workspace/outputs/aef_qwen_v2/embeddings \
-        --output-dir data/harbin/embeddings/v2 \
+        --embeddings-dir /path/to/embeddings \
+        --output-dir data/<region>/embeddings/v2 \
         --max-patches 500
 """
 from __future__ import annotations

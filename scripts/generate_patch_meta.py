@@ -3,10 +3,10 @@
 
 Usage:
     python scripts/generate_patch_meta.py \
-        --region harbin \
-        --grid /workspace/index/harbin/grid/harbin_grid.geojson \
-        --raw-dir /workspace/raw/harbin_scenes \
-        --output-dir data/harbin
+        --region <region> \
+        --grid /path/to/grid.geojson \
+        --raw-dir /path/to/raw_scenes \
+        --output-dir data/<region>
 """
 from __future__ import annotations
 
