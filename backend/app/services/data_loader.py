@@ -65,7 +65,8 @@ class DataLoader:
         """返回 head 推理结果图路径."""
         if version == "v4":
             # v4 官方预计算结果在当前机器上不可用，回退到 v5 结果目录
-            v4_dir = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/results")
+            from app.config import settings
+            v4_dir = settings.results_dir
             if head_id == "change_detection":
                 for ext in (".png", ".jpg", ".tif"):
                     path = v4_dir / head_id / f"{period}{ext}"

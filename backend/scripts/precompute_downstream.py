@@ -5,7 +5,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "/workspace/xuannv_show/backend")
+# 自动定位项目根目录
+_SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPT_DIR.parent))
 
 from PIL import Image
 from tqdm import tqdm
@@ -13,7 +15,9 @@ from tqdm import tqdm
 from app.services.task_engine import ChangeDetectionEngine, EMBEDDING_DIR
 
 # ── Config ──
-RESULTS_DIR = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/results")
+from app.config import settings
+
+RESULTS_DIR = settings.results_dir
 TILE_SIZE = 128
 PANEL_SIZE = 256
 

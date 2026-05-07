@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -10,14 +9,14 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-sys.path.insert(0, "/workspace/xuannv")
+from app.config import settings
 
 from src.models.heads import ChangeDetectionHeadV3
 
 # ── Paths ──
-EMBEDDING_DIR = Path("/workspace/raw/xuannv_modelscope_upload/embeddings/v5_mixed_scale/monthly_embeddings_2025")
-HEAD_PATH = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/monthly_cd_head/monthly_cd_head_v5_final.pt")
-PATCHES_META_PATH = Path("/workspace/xuannv_show/data/harbin/patches_meta.json")
+EMBEDDING_DIR = settings.embeddings_dir
+HEAD_PATH = settings.cd_head_path
+PATCHES_META_PATH = settings.patches_meta_path
 
 # S2 RGB loader (lazy import to avoid heavy deps at module load)
 _load_patch_source_rgb = None

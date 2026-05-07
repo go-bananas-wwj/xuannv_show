@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import joblib
@@ -10,13 +9,13 @@ import numpy as np
 import rasterio
 from PIL import Image, ImageDraw, ImageFont
 
-sys.path.insert(0, "/workspace/xuannv")
+from app.config import settings
 
 # ── Paths ──
 MODEL_DIR = Path(__file__).resolve().parent.parent.parent / "models"
-EMBEDDING_DIR = Path("/workspace/raw/xuannv_modelscope_upload/embeddings/v5_mixed_scale/monthly_embeddings_2025")
-RAW_DIR = Path("/workspace/raw/harbin_scenes")
-PATCHES_META_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data" / "harbin" / "patches_meta.json"
+EMBEDDING_DIR = settings.embeddings_dir
+RAW_DIR = settings.raw_scenes_dir
+PATCHES_META_PATH = settings.patches_meta_path
 
 # GT 数据源映射
 _GT_SOURCE_MAP = {
@@ -139,9 +138,10 @@ class SegmentationEngine:
 
         # 绘制标签
         draw = ImageDraw.Draw(canvas)
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 14)
-        except Exception:
+        font_path = settings.effective_font_path
+        if font_path:
+            font = ImageFont.truetype(str(font_path), 14)
+        else:
             font = ImageFont.load_default()
 
         for i, label in enumerate(labels):
@@ -258,9 +258,10 @@ class SegmentationEngine:
         """生成灰色占位图."""
         img = Image.new("RGB", (size, size), (220, 220, 220))
         draw = ImageDraw.Draw(img)
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 16)
-        except Exception:
+        font_path = settings.effective_font_path
+        if font_path:
+            font = ImageFont.truetype(str(font_path), 16)
+        else:
             font = ImageFont.load_default()
         bbox = draw.textbbox((0, 0), text, font=font)
         text_w = bbox[2] - bbox[0]

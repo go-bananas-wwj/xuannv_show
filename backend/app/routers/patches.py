@@ -44,8 +44,7 @@ def _build_mosaic_image(region: str, month: str, source: str, tile_size: int) ->
     from PIL import Image
     import numpy as np
 
-    # 动态导入外部模块（路径在运行时注入）
-    sys.path.insert(0, "/workspace/xuannv")
+    # 动态导入外部模块（路径在 main.py 统一注入）
     from demo_v2.utils.constants import TIME_WINDOWS
     from demo_v2.engines.patch_image_loader import load_patch_source_rgb
 

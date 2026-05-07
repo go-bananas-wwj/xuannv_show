@@ -14,7 +14,7 @@ sleep 2
 
 # 启动看门狗（它会自动拉起前后端）
 echo "[2/3] 启动看门狗..."
-cd /workspace/xuannv_show
+cd "$(dirname "$0")/.."
 conda run -n xuannv nohup python scripts/watchdog.py > /tmp/xuannv_watchdog.log 2>&1 &
 sleep 1
 

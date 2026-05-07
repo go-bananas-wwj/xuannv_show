@@ -23,8 +23,10 @@ _VALID_REGION_RE = re.compile(r"^[a-zA-Z0-9_]+$")
 _VALID_VERSION_RE = re.compile(r"^v\d+$")
 _VALID_PATCH_ID_RE = re.compile(r"^patch_\d{6}$")
 
+from app.config import settings
+
 # 预计算结果目录
-RESULTS_DIR = Path("/workspace/outputs/aef_qwen_v5_mixed_scale/results")
+RESULTS_DIR = settings.results_dir
 
 
 @router.get("")

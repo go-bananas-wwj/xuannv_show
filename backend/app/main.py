@@ -15,6 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.config import settings
+
+# 统一注入 AlphaEarth 核心模块路径（必须在导入依赖 src 的模块之前）
+import sys
+sys.path.insert(0, str(settings.xuannv_root))
+
 from app.routers import patches, embeddings, heads, agent, annotate, auth
 
 
@@ -73,10 +79,8 @@ class TimingMiddleware(BaseHTTPMiddleware):
             print(f"[SLOW] {request.method} {request.url.path} took {elapsed:.2f}s")
         return response
 
-# 路径
-BACKEND_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = BACKEND_DIR.parent.parent
-FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+# 路径（从配置读取，支持环境变量覆盖）
+FRONTEND_DIST = settings.project_root / "frontend" / "dist"
 
 import asyncio
 
@@ -109,16 +113,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — 生产环境应收紧为具体域名
-# 开发环境允许 localhost，生产环境通过环境变量配置
-import os
-_cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
-if os.environ.get("ALLOW_ALL_ORIGINS", "").lower() == "true":
+# CORS — 从配置读取（支持环境变量 + .env 文件）
+_cors_origins = settings.cors_origins.split(",")
+if settings.allow_all_origins:
     _cors_origins = ["*"]
-
-# 若从容器外部访问，默认只允许 localhost，除非显式配置 CORS_ORIGINS
-if not os.environ.get("CORS_ORIGINS"):
-    _cors_origins = ["http://localhost:5173", "http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -162,8 +160,6 @@ async def get_patch_image(patch_id: str, month: str, source: str = "s2") -> byte
         return Response(content=cached, media_type="image/jpeg")
 
     # 2. 未命中：实时生成
-    import sys
-    sys.path.insert(0, "/workspace/xuannv")
     from demo_v2.utils.constants import TIME_WINDOWS
     from demo_v2.engines.patch_image_loader import load_patch_source_rgb
 

@@ -138,7 +138,7 @@ def start_backend() -> None:
     kill_processes(r"python.*multiprocessing.*spawn_main")
     cmd = (
         f"cd {BACKEND_DIR} && "
-        f"PYTHONPATH=/workspace/xuannv_show/backend:/workspace/xuannv_show/backend/sam3 "
+        f"PYTHONPATH={BACKEND_DIR}:{BACKEND_DIR}/sam3 "
         f"conda run -n {CONDA_ENV} nohup uvicorn app.main:app --host 0.0.0.0 --port {BACKEND_PORT} "
         f"> {BACKEND_LOG} 2>&1 &"
     )

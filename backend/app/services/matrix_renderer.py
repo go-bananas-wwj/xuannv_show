@@ -18,9 +18,11 @@ matplotlib.use("Agg")
 plt.rcParams["font.sans-serif"] = ["WenQuanYi Micro Hei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
+from app.config import settings
+
 # ── 路径常量 ──
-RAW_DIR = Path("/workspace/raw/harbin_scenes")
-FALLBACK_RAW_DIR = Path("/workspace/raw/harbin")
+RAW_DIR = settings.raw_scenes_dir
+FALLBACK_RAW_DIR = settings.raw_fallback_dir
 
 # ── 数据源显示名称 ──
 SOURCE_DISPLAY_NAMES = {

@@ -13,8 +13,10 @@ from PIL import Image
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 
+from app.config import settings
+
 # ── Paths ──
-BASE_ANNOTATIONS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "user_annotations"
+BASE_ANNOTATIONS_DIR = settings.user_data_dir
 
 
 def _get_user_dir(user_id: str) -> Path:
@@ -23,9 +25,9 @@ def _get_user_dir(user_id: str) -> Path:
     d.mkdir(parents=True, exist_ok=True)
     return d
 
-EMBEDDING_DIR = Path("/workspace/raw/xuannv_modelscope_upload/embeddings/v5_mixed_scale/monthly_embeddings_2025")
-RAW_DIR = Path("/workspace/raw/xuannv_modelscope_upload/raw_data")
-PATCHES_META_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "data" / "harbin" / "patches_meta.json"
+EMBEDDING_DIR = settings.embeddings_dir
+RAW_DIR = settings.raw_scenes_dir
+PATCHES_META_PATH = settings.patches_meta_path
 
 SAM3_SERVICE_URL = "http://localhost:8001"
 
@@ -214,8 +216,8 @@ class SAM3Client:
             device = self._get_freest_device()
             self._device = device
             print(f"[SAM3Client] Loading SAM3 model on {device}...")
-            checkpoint_path = "/workspace/models/facebook/sam3/sam3.pt"
-            bpe_path = "/workspace/xuannv_show/backend/sam3/sam3/assets/bpe_simple_vocab_16e6.txt.gz"
+            checkpoint_path = str(settings.sam3_checkpoint)
+            bpe_path = str(settings.sam3_bpe_path)
             self._model = build_sam3_image_model(
                 bpe_path=bpe_path,
                 checkpoint_path=checkpoint_path,
@@ -264,8 +266,6 @@ class SAM3Client:
 
     def _load_s2_image(self, patch_id: str, month: str) -> Path:
         """Load S2 image for a patch and save as temporary PNG for SAM3."""
-        import sys
-        sys.path.insert(0, "/workspace/xuannv")
         from demo_v2.utils.constants import TIME_WINDOWS, RAW_DIR as DEMO_RAW_DIR
         from demo_v2.engines.patch_image_loader import _find_best_tif
         import rasterio
