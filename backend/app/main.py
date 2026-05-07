@@ -94,7 +94,7 @@ async def lifespan(app: FastAPI):
     """
     print("[startup] Preloading SAM3 model...")
     try:
-        from app.services.annotate_engine import get_sam3_client
+        from app.services.annotate import get_sam3_client
         client = get_sam3_client()
         await asyncio.to_thread(client.warmup)
     except Exception as e:

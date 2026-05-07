@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, UploadFi
 from pydantic import BaseModel
 import json
 
-from app.services.annotate_engine import (
+from app.services.annotate import (
     get_class_manager,
     get_annotation_store,
     get_sam3_client,
