@@ -1,10 +1,9 @@
 
-  VITE v8.0.8  ready in 524 ms
+> frontend@0.0.0 dev
+> vite --host 0.0.0.0 --port 5173
+
+
+  VITE v8.0.8  ready in 939 ms
 
   ➜  Local:   http://localhost:5173/
-  ➜  Network: http://172.20.0.3:5173/
-12:46:42 AM [vite] (client) hmr update /src/App.tsx, /src/styles/index.css
-12:47:09 AM [vite] (client) hmr update /src/App.tsx, /src/styles/index.css
-12:47:38 AM [vite] (client) hmr update /src/components/Navigation.tsx, /src/styles/index.css
-12:49:41 AM [vite] (client) hmr update /src/styles/index.css, /src/sections/AgentSection.tsx
-12:56:32 AM [vite] (client) hmr update /src/styles/index.css, /src/sections/AgentSection.tsx
+  ➜  Network: http://172.20.0.10:5173/

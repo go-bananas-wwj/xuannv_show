@@ -104,6 +104,7 @@ export const useAnnotateStore = create<AnnotateState>((set) => ({
   removeClass: (id) => set((state) => ({
     classes: state.classes.filter((c) => c.id !== id),
     activeClassId: state.activeClassId === id ? null : state.activeClassId,
+    annotations: state.annotations.filter((a) => a.class_id !== id),
   })),
   updateClassName: (id, name) => set((state) => ({
     classes: state.classes.map((c) => c.id === id ? { ...c, name } : c),

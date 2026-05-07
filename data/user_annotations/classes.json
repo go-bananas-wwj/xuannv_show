@@ -3,5 +3,15 @@
     "id": "cls_6a5fd3eb",
     "name": "建筑工地",
     "color": "#FF4444"
+  },
+  {
+    "id": "cls_778c32e8",
+    "name": "河流",
+    "color": "#FF4444"
+  },
+  {
+    "id": "cls_dcc9d708",
+    "name": "建筑",
+    "color": "#FF4444"
   }
 ]

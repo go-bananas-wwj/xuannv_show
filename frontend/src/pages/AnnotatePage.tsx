@@ -1363,6 +1363,7 @@ export default function AnnotatePage() {
                           onChange={(e) => setEditingClassName(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
+                              if (!confirm(`确定将类别 "${cls.name}" 重命名为 "${editingClassName}"？`)) return
                               renameClass(cls.id, editingClassName).then(() => {
                                 store.updateClassName(cls.id, editingClassName)
                                 setEditingClassId(null)
@@ -1377,6 +1378,7 @@ export default function AnnotatePage() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
+                            if (!confirm(`确定将类别 "${cls.name}" 重命名为 "${editingClassName}"？`)) return
                             renameClass(cls.id, editingClassName).then(() => {
                               store.updateClassName(cls.id, editingClassName)
                               setEditingClassId(null)
@@ -1403,12 +1405,20 @@ export default function AnnotatePage() {
                         <button
                           onClick={async (e) => {
                             e.stopPropagation()
-                            if (!confirm(`确定删除类别 "${cls.name}"？关联的 ${store.annotations.filter(a => a.class_id === cls.id).length} 条标注也将被删除。`)) return
+                            const relatedCount = store.annotations.filter(a => a.class_id === cls.id).length
+                            const confirmMsg = relatedCount > 0
+                              ? `确定删除类别 "${cls.name}"？\n\n该类别下有 ${relatedCount} 条标注，删除类别将同时删除所有这些标注。此操作不可恢复。`
+                              : `确定删除类别 "${cls.name}"？`
+                            if (!confirm(confirmMsg)) return
                             try {
                               await deleteClass(cls.id)
                               store.removeClass(cls.id)
+                              // 刷新标注列表确保同步
+                              const anns = await fetchAnnotations()
+                              store.setAnnotations(anns)
                             } catch (err) {
                               console.error('Failed to delete class:', err)
+                              alert('删除失败：' + (err.message || '未知错误'))
                             }
                           }}
                           className="text-slate-400 hover:text-red-500"
