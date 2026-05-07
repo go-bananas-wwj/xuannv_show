@@ -16,6 +16,8 @@ from app.services.annotate import (
     get_training_engine,
     get_inference_engine,
     get_model_registry,
+    get_cd_model_registry,
+    get_cd_training_engine,
 )
 from app.services.system_models import (
     list_system_models,
@@ -128,6 +130,8 @@ class AnnotationCreate(BaseModel):
     class_id: str
     score: float
     geometry: GeometryMask | GeometryPolygon | GeometryPolyline
+    before_month: str | None = None
+    after_month: str | None = None
 
 class AnnotationOut(BaseModel):
     id: str
@@ -137,6 +141,8 @@ class AnnotationOut(BaseModel):
     score: float
     created_at: str
     geometry: GeometryMask | GeometryPolygon | GeometryPolyline
+    before_month: str | None = None
+    after_month: str | None = None
 
 @router.get("/annotations", response_model=list[AnnotationOut])
 def list_annotations(user: dict = Depends(get_current_user)) -> list[dict]:
@@ -156,6 +162,8 @@ def create_annotation(req: AnnotationCreate, user: dict = Depends(get_current_us
         class_id=req.class_id,
         score=req.score,
         geometry=req.geometry.model_dump(),
+        before_month=req.before_month,
+        after_month=req.after_month,
     )
 
 @router.delete("/annotations/{ann_id}")
@@ -538,3 +546,208 @@ def get_system_model_result(filename: str) -> "FileResponse":
     
     return FileResponse(file_path, media_type="image/png")
 
+
+
+# ── Change Detection Models ──
+
+_cd_training_jobs: dict[str, dict] = {}
+
+
+class CDModelOut(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    id: str
+    name: str
+    status: str
+    created_at: str
+    completed_at: str | None
+    classes: list[dict]
+    accuracy: float | None
+    n_samples: int | None
+    model_path: str | None
+    message: str | None
+
+
+class CDModelCreateRequest(BaseModel):
+    name: str
+
+
+@router.get("/cd-models", response_model=list[CDModelOut])
+def list_cd_models(user: dict = Depends(get_current_user)) -> list[dict]:
+    registry = get_cd_model_registry(user["user_id"])
+    return registry.list_models()
+
+
+@router.post("/cd-models")
+def create_cd_model(req: CDModelCreateRequest, user: dict = Depends(get_current_user)) -> dict:
+    registry = get_cd_model_registry(user["user_id"])
+    mgr = get_class_manager(user["user_id"])
+    classes = mgr.list_classes()
+    model_id = registry.create_model(req.name, classes)
+    return {"model_id": model_id, "status": "created"}
+
+
+@router.get("/cd-models/{model_id}", response_model=CDModelOut)
+def get_cd_model(model_id: str, user: dict = Depends(get_current_user)) -> dict:
+    registry = get_cd_model_registry(user["user_id"])
+    model = registry.get_model(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="CD model not found")
+    return model
+
+
+@router.delete("/cd-models/{model_id}")
+def delete_cd_model(model_id: str, user: dict = Depends(get_current_user)) -> dict:
+    registry = get_cd_model_registry(user["user_id"])
+    if not registry.delete_model(model_id):
+        raise HTTPException(status_code=404, detail="CD model not found")
+    return {"status": "ok"}
+
+
+# ── Change Detection Training ──
+
+@router.post("/cd-models/{model_id}/train")
+def train_cd_model(model_id: str, background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    registry = get_cd_model_registry(user["user_id"])
+    model = registry.get_model(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="CD model not found")
+
+    job_id = str(uuid.uuid4())[:8]
+    _cd_training_jobs[job_id] = {
+        "job_id": job_id,
+        "model_id": model_id,
+        "status": "running",
+        "user_id": user["user_id"],
+        "started_at": datetime.now().isoformat(),
+    }
+    background_tasks.add_task(_do_cd_training, job_id, model_id, user["user_id"])
+    return {"job_id": job_id, "model_id": model_id, "status": "running"}
+
+
+class CDTrainStatusOut(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    job_id: str
+    status: str
+    accuracy: float | None = None
+    n_samples: int | None = None
+    model_path: str | None = None
+    message: str | None = None
+
+
+@router.get("/cd-train/{job_id}", response_model=CDTrainStatusOut)
+def get_cd_train_status(job_id: str, user: dict = Depends(get_current_user)) -> dict:
+    job = _cd_training_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if user.get("role") != "admin" and job.get("user_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return {
+        "job_id": job["job_id"],
+        "status": job["status"],
+        "accuracy": job.get("accuracy"),
+        "n_samples": job.get("n_samples"),
+        "model_path": job.get("model_path"),
+        "message": job.get("message"),
+    }
+
+
+def _do_cd_training(job_id: str, model_id: str, user_id: str) -> None:
+    try:
+        engine = get_cd_training_engine(user_id)
+        result = engine.train(model_id)
+        registry = get_cd_model_registry(user_id)
+        registry.update_model(
+            model_id,
+            status="completed",
+            completed_at=datetime.now().isoformat(),
+            accuracy=result["accuracy"],
+            n_samples=result["n_samples"],
+        )
+        _cd_training_jobs[job_id].update({
+            "status": "completed",
+            "accuracy": result["accuracy"],
+            "n_samples": result["n_samples"],
+            "model_path": result["model_path"],
+        })
+    except Exception as e:
+        registry = get_cd_model_registry(user_id)
+        registry.update_model(model_id, status="failed", message=str(e))
+        _cd_training_jobs[job_id].update({
+            "status": "failed",
+            "message": str(e),
+        })
+
+
+# ── Change Detection Inference ──
+
+class CDInferRequest(BaseModel):
+    patch_id: str
+    before_month: str
+    after_month: str
+
+
+@router.post("/cd-models/{model_id}/infer")
+def infer_cd_model(model_id: str, req: CDInferRequest, user: dict = Depends(get_current_user)) -> dict:
+    import numpy as np
+    from PIL import Image
+    from app.config import settings
+
+    registry = get_cd_model_registry(user["user_id"])
+    model = registry.get_model(model_id)
+    if not model or model.get("status") != "completed":
+        raise HTTPException(status_code=400, detail="Model not trained or not found")
+
+    model_path = Path(model["model_path"])
+    if not model_path.exists():
+        raise HTTPException(status_code=404, detail="Model file not found")
+
+    model_data = joblib.load(model_path)
+    scaler = model_data["scaler"]
+    clf = model_data["model"]
+
+    emb_before_path = settings.embeddings_dir / f"{req.patch_id}_{req.before_month}.npy"
+    emb_after_path = settings.embeddings_dir / f"{req.patch_id}_{req.after_month}.npy"
+    if not emb_before_path.exists() or not emb_after_path.exists():
+        raise HTTPException(status_code=404, detail="Embedding not found for the requested period")
+
+    emb_before = np.load(emb_before_path)
+    emb_after = np.load(emb_after_path)
+    diff = emb_after - emb_before
+
+    D, H, W = diff.shape
+    diff_flat = diff.reshape(D, -1).T
+    diff_scaled = scaler.transform(diff_flat)
+    pred = clf.predict(diff_scaled).reshape(H, W)
+    probs = clf.predict_proba(diff_scaled)[:, 1].reshape(H, W)
+
+    # Color encode: change=red, no-change=transparent
+    rgb = np.full((H, W, 4), 0, dtype=np.uint8)
+    rgb[pred == 1] = [239, 68, 68, 180]   # red with alpha
+    rgb[pred == 0] = [0, 0, 0, 0]          # transparent
+
+    # Resize to 256x256
+    img = Image.fromarray(rgb, mode="RGBA").resize((256, 256), Image.Resampling.NEAREST)
+
+    # Save result
+    results_dir = settings.project_root / "data" / "cd_results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    result_path = results_dir / f"{model_id}_{req.patch_id}_{req.before_month}_{req.after_month}.png"
+    img.save(result_path)
+
+    return {"image_url": f"/api/annotate/cd-results/{result_path.name}"}
+
+
+@router.get("/cd-results/{filename}")
+def get_cd_result(filename: str, user: dict = Depends(get_current_user)) -> "FileResponse":
+    from fastapi.responses import FileResponse
+    from app.config import settings
+
+    results_dir = settings.project_root / "data" / "cd_results"
+    file_path = results_dir / filename
+
+    if not str(file_path.resolve()).startswith(str(results_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Result image not found")
+
+    return FileResponse(file_path, media_type="image/png")

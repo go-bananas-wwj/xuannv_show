@@ -37,7 +37,16 @@ class AnnotationStore:
                 ann["geometry"] = {"type": "mask", "mask_b64": ann.pop("mask_b64", "")}
         return data
 
-    def create_annotation(self, patch_id: str, month: str, class_id: str, score: float, geometry: dict) -> dict:
+    def create_annotation(
+        self,
+        patch_id: str,
+        month: str,
+        class_id: str,
+        score: float,
+        geometry: dict,
+        before_month: str | None = None,
+        after_month: str | None = None,
+    ) -> dict:
         ann_id = f"ann_{uuid.uuid4().hex[:8]}"
         mask_path = self.masks_dir / f"{ann_id}.npz"
 
@@ -62,6 +71,11 @@ class AnnotationStore:
             "geometry": geometry,
             "created_at": datetime.now().isoformat(),
         }
+        # 变化检测标注：记录双期月份
+        if before_month is not None:
+            ann["before_month"] = before_month
+        if after_month is not None:
+            ann["after_month"] = after_month
         data = self._load()
         data.append(ann)
         self._save(data)

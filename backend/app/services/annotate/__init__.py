@@ -6,6 +6,12 @@ from .class_manager import ClassManager
 from .inference_engine import InferenceEngine
 from .sam3_client import SAM3Client
 from .training_engine import ModelRegistry, TrainingEngine
+from .cd_training_engine import (
+    ChangeDetectionModelRegistry,
+    ChangeDetectionTrainingEngine,
+    get_cd_model_registry,
+    get_cd_training_engine,
+)
 from .utils import _get_user_dir
 
 # ── Per-User Singletons ──

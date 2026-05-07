@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowLeftCircle, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X, Hand, MousePointer2, GraduationCap, Pencil } from 'lucide-react'
+import { ArrowLeft, ArrowLeftCircle, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X, Hand, MousePointer2, GraduationCap, Pencil, GitCompare } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useAnnotateStore } from '@/stores/annotateStore'
 import { useTourStore } from '@/stores/tourStore'
@@ -105,8 +105,55 @@ export default function AnnotatePage() {
   const [isSystemPanelOpen, setIsSystemPanelOpen] = useState(true)
   const [systemInferring, setSystemInferring] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [, setCdModels] = useState<Array<{ id: string; name: string; status: string; accuracy: number | null }>>([])
+  const [isTrainingCD, setIsTrainingCD] = useState(false)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   const scaleRef = useRef(1)
+
+  // ── Change Detection helpers ──
+  const fetchCDModels = useCallback(async () => {
+    try {
+      const { listCDModels } = await import('@/utils/api')
+      const models = await listCDModels()
+      setCdModels(models.map(m => ({ id: m.id, name: m.name, status: m.status, accuracy: m.accuracy })))
+    } catch (err) {
+      console.error('Failed to fetch CD models:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (store.annotationMode === 'change_detection') {
+      fetchCDModels()
+    }
+  }, [store.annotationMode, fetchCDModels])
+
+  const handleTrainCD = async () => {
+    if (!store.activeClassId) {
+      alert('请先创建并选择一个类别')
+      return
+    }
+    setIsTrainingCD(true)
+    try {
+      const { createCDModel, trainCDModel, getCDTrainingStatus } = await import('@/utils/api')
+      const { model_id } = await createCDModel(`变化检测_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '')}`)
+      const { job_id } = await trainCDModel(model_id)
+      const interval = setInterval(async () => {
+        try {
+          const status = await getCDTrainingStatus(job_id)
+          if (status.status === 'completed' || status.status === 'failed') {
+            clearInterval(interval)
+            fetchCDModels()
+          }
+        } catch (err) {
+          clearInterval(interval)
+        }
+      }, 2000)
+    } catch (err) {
+      console.error('CD training failed:', err)
+    } finally {
+      setIsTrainingCD(false)
+    }
+  }
 
   const handleLoadSystemClasses = async (modelId: string) => {
     try {
@@ -213,7 +260,7 @@ export default function AnnotatePage() {
       return
     }
     const patch = store.selectedPatch
-    const month = store.selectedMonth
+    const month = store.annotationMode === 'change_detection' ? store.selectedAfterMonth : store.selectedMonth
     const url = `/api/patches/${patch.patch_id}/image?month=${month}&source=${dataSource}`
     setImageUrl(url)
     setMaskObjs([])
@@ -224,7 +271,7 @@ export default function AnnotatePage() {
     store.setMaskCandidates([])
     setSamEnabled(false)
     setSamError(null)
-  }, [store.selectedPatch, store.selectedMonth, dataSource])
+  }, [store.selectedPatch, store.selectedMonth, store.selectedAfterMonth, store.annotationMode, dataSource])
 
   // ── Load image object ──
   useEffect(() => {
@@ -621,7 +668,8 @@ export default function AnnotatePage() {
       const newPoint: PromptPoint = { x: pos.x, y: pos.y, label: isNegative ? 0 : 1 }
       setPoints(prev => {
         const next = [...prev, newPoint]
-        const embeddingId = `${store.selectedPatch!.patch_id}_${store.selectedMonth}`
+        const month = store.annotationMode === 'change_detection' ? store.selectedAfterMonth : store.selectedMonth
+        const embeddingId = `${store.selectedPatch!.patch_id}_${month}`
         store.setIsLoadingMask(true)
         segmentWithSAM(
           embeddingId,
@@ -698,28 +746,29 @@ export default function AnnotatePage() {
     }
     try {
       let ann
+      const isCD = store.annotationMode === 'change_detection'
       if (finishedGeometry) {
-        // Save polygon / polyline annotation
         ann = await saveAnnotation({
           patch_id: store.selectedPatch.patch_id,
-          month: store.selectedMonth,
+          month: isCD ? store.selectedAfterMonth : store.selectedMonth,
           class_id: store.activeClassId,
           score: 1.0,
           geometry: {
             type: finishedGeometry.type,
             points: finishedGeometry.points.map(p => [p.x, p.y]),
           },
+          ...(isCD ? { before_month: store.selectedBeforeMonth, after_month: store.selectedAfterMonth } : {}),
         })
         setFinishedGeometry(null)
       } else if (store.maskCandidates.length > 0) {
-        // Save SAM mask annotation
         const mask = store.maskCandidates[store.selectedMaskIndex]
         ann = await saveAnnotation({
           patch_id: store.selectedPatch.patch_id,
-          month: store.selectedMonth,
+          month: isCD ? store.selectedAfterMonth : store.selectedMonth,
           class_id: store.activeClassId,
           score: mask.score,
           geometry: { type: 'mask', mask_b64: mask.mask_b64 },
+          ...(isCD ? { before_month: store.selectedBeforeMonth, after_month: store.selectedAfterMonth } : {}),
         })
         store.setMaskCandidates([])
         setPoints([])
@@ -892,6 +941,21 @@ export default function AnnotatePage() {
               {mode === 'create' ? '创建模式' : '编辑模式'}
             </button>
           )}
+          {viewMode === 'annotate' && (
+            <button
+              onClick={() => store.setAnnotationMode(store.annotationMode === 'segmentation' ? 'change_detection' : 'segmentation')}
+              className={cn(
+                'flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors',
+                store.annotationMode === 'change_detection'
+                  ? 'bg-violet-50 border-violet-200 text-violet-700'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+              )}
+              title="切换标注模式"
+            >
+              <GitCompare className="w-3 h-3" />
+              {store.annotationMode === 'change_detection' ? '变化检测' : '单期分割'}
+            </button>
+          )}
           {store.trainedModelPath && (
             <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
               模型已训练
@@ -943,17 +1007,48 @@ export default function AnnotatePage() {
         <div className="flex-1 flex overflow-hidden">
           {/* Left panel */}
           <aside className="w-64 border-r border-slate-200 bg-white flex flex-col">
-            <div className="p-3 border-b border-slate-100">
-              <label className="text-xs font-medium text-slate-500 mb-1 block">月份</label>
-              <select
-                value={store.selectedMonth}
-                onChange={(e) => store.setSelectedMonth(e.target.value)}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-              >
-                {MONTHS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+            <div className="p-3 border-b border-slate-100 space-y-2">
+              {store.annotationMode === 'change_detection' ? (
+                <>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">前期 (Before)</label>
+                    <select
+                      value={store.selectedBeforeMonth}
+                      onChange={(e) => store.setSelectedBeforeMonth(e.target.value)}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+                    >
+                      {MONTHS.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">后期 (After)</label>
+                    <select
+                      value={store.selectedAfterMonth}
+                      onChange={(e) => store.setSelectedAfterMonth(e.target.value)}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+                    >
+                      {MONTHS.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label className="text-xs font-medium text-slate-500 mb-1 block">月份</label>
+                  <select
+                    value={store.selectedMonth}
+                    onChange={(e) => store.setSelectedMonth(e.target.value)}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+                  >
+                    {MONTHS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
             <div className="flex-1 overflow-y-auto p-2">
               <label className="text-xs font-medium text-slate-500 mb-1 block px-1">Patch 列表</label>
@@ -1180,15 +1275,26 @@ export default function AnnotatePage() {
 
             {/* Bottom action bar */}
             <div className="flex items-center gap-2 px-4 py-3 bg-white border-t border-slate-200">
-              <button
-                id="tour-step-train"
-                onClick={handleTrain}
-                disabled={isTraining || store.annotations.length === 0}
-                className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-900 disabled:opacity-50"
-              >
-                {isTraining ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                训练分类头
-              </button>
+              {store.annotationMode === 'change_detection' ? (
+                <button
+                  onClick={handleTrainCD}
+                  disabled={isTrainingCD || store.annotations.filter(a => a.before_month && a.after_month).length === 0}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-violet-700 text-white text-sm rounded-lg hover:bg-violet-800 disabled:opacity-50"
+                >
+                  {isTrainingCD ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitCompare className="w-4 h-4" />}
+                  训练变化检测模型
+                </button>
+              ) : (
+                <button
+                  id="tour-step-train"
+                  onClick={handleTrain}
+                  disabled={isTraining || store.annotations.length === 0}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-900 disabled:opacity-50"
+                >
+                  {isTraining ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                  训练分类头
+                </button>
+              )}
               <Link
                 to="/models"
                 className="flex items-center gap-1.5 px-4 py-2 bg-white text-slate-700 text-sm rounded-lg hover:bg-slate-50 border border-slate-200"
@@ -1272,7 +1378,10 @@ export default function AnnotatePage() {
                     setSamLoading(true)
                     setSamError(null)
                     try {
-                      await preloadSAM3Embedding(store.selectedPatch.patch_id, store.selectedMonth)
+                      await preloadSAM3Embedding(
+                        store.selectedPatch.patch_id,
+                        store.annotationMode === 'change_detection' ? store.selectedAfterMonth : store.selectedMonth
+                      )
                       store.setIsEmbeddingReady(true)
                       setSamEnabled(true)
                       setDrawMode('sam')

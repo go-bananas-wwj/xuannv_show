@@ -378,4 +378,66 @@ export async function inferSystemModel(
   return data
 }
 
+// ── Change Detection API ──
+
+export interface CDModelInfo {
+  id: string
+  name: string
+  status: string
+  created_at: string
+  completed_at: string | null
+  classes: Array<{ id: string; name: string; color: string }>
+  accuracy: number | null
+  n_samples: number | null
+  model_path: string | null
+  message: string | null
+}
+
+export interface CDTrainingStatus {
+  job_id: string
+  status: string
+  accuracy?: number
+  n_samples?: number
+  model_path?: string
+  message?: string
+}
+
+export async function listCDModels(): Promise<CDModelInfo[]> {
+  const { data } = await api.get<CDModelInfo[]>('/annotate/cd-models')
+  return data
+}
+
+export async function createCDModel(name: string): Promise<{ model_id: string; status: string }> {
+  const { data } = await api.post('/annotate/cd-models', { name })
+  return data
+}
+
+export async function deleteCDModel(modelId: string): Promise<void> {
+  await api.delete(`/annotate/cd-models/${modelId}`)
+}
+
+export async function trainCDModel(modelId: string): Promise<{ job_id: string; model_id: string; status: string }> {
+  const { data } = await api.post(`/annotate/cd-models/${modelId}/train`)
+  return data
+}
+
+export async function getCDTrainingStatus(jobId: string): Promise<CDTrainingStatus> {
+  const { data } = await api.get<CDTrainingStatus>(`/annotate/cd-train/${jobId}`)
+  return data
+}
+
+export async function inferCDModel(
+  modelId: string,
+  patchId: string,
+  beforeMonth: string,
+  afterMonth: string
+): Promise<{ image_url: string }> {
+  const { data } = await api.post(`/annotate/cd-models/${modelId}/infer`, {
+    patch_id: patchId,
+    before_month: beforeMonth,
+    after_month: afterMonth,
+  })
+  return data
+}
+
 export default api

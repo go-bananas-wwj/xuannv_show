@@ -32,6 +32,8 @@ export interface Annotation {
   score: number
   created_at: string
   geometry: Geometry
+  before_month?: string
+  after_month?: string
 }
 
 export interface MaskCandidate {
@@ -47,8 +49,12 @@ export interface TrainingJob {
   message?: string
 }
 
+type AnnotationMode = 'segmentation' | 'change_detection'
+
 interface AnnotateState {
   selectedMonth: string
+  selectedBeforeMonth: string
+  selectedAfterMonth: string
   selectedPatch: PatchMeta | null
   classes: ClassDef[]
   activeClassId: string | null
@@ -60,8 +66,11 @@ interface AnnotateState {
   trainedModelPath: string | null
   inferenceImageUrl: string | null
   isEmbeddingReady: boolean
+  annotationMode: AnnotationMode
 
   setSelectedMonth: (month: string) => void
+  setSelectedBeforeMonth: (month: string) => void
+  setSelectedAfterMonth: (month: string) => void
   setSelectedPatch: (patch: PatchMeta | null) => void
   setClasses: (classes: ClassDef[]) => void
   addClass: (cls: ClassDef) => void
@@ -78,6 +87,7 @@ interface AnnotateState {
   setTrainedModelPath: (path: string | null) => void
   setInferenceImageUrl: (url: string | null) => void
   setIsEmbeddingReady: (ready: boolean) => void
+  setAnnotationMode: (mode: AnnotationMode) => void
   // System models
   systemModels: Array<{ id: string; name: string; description: string; available: boolean }>
   setSystemModels: (models: Array<{ id: string; name: string; description: string; available: boolean }>) => void
@@ -85,6 +95,8 @@ interface AnnotateState {
 
 export const useAnnotateStore = create<AnnotateState>((set) => ({
   selectedMonth: '2025-04',
+  selectedBeforeMonth: '2025-04',
+  selectedAfterMonth: '2025-10',
   selectedPatch: null,
   classes: [],
   activeClassId: null,
@@ -96,9 +108,12 @@ export const useAnnotateStore = create<AnnotateState>((set) => ({
   trainedModelPath: null,
   inferenceImageUrl: null,
   isEmbeddingReady: false,
+  annotationMode: 'segmentation',
   systemModels: [],
 
   setSelectedMonth: (month) => set({ selectedMonth: month }),
+  setSelectedBeforeMonth: (month) => set({ selectedBeforeMonth: month }),
+  setSelectedAfterMonth: (month) => set({ selectedAfterMonth: month }),
   setSelectedPatch: (patch) => set({ selectedPatch: patch, isEmbeddingReady: false, maskCandidates: [] }),
   setClasses: (classes) => set((state) => ({
     classes,
@@ -124,5 +139,6 @@ export const useAnnotateStore = create<AnnotateState>((set) => ({
   setTrainedModelPath: (path) => set({ trainedModelPath: path }),
   setInferenceImageUrl: (url) => set({ inferenceImageUrl: url }),
   setIsEmbeddingReady: (ready) => set({ isEmbeddingReady: ready }),
+  setAnnotationMode: (mode) => set({ annotationMode: mode }),
   setSystemModels: (models) => set({ systemModels: models }),
 }))
