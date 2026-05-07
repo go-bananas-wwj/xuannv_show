@@ -17,6 +17,11 @@ from app.services.annotate import (
     get_inference_engine,
     get_model_registry,
 )
+from app.services.system_models import (
+    list_system_models,
+    get_system_model_classes,
+    infer_system_model,
+)
 from app.services.user_service import get_current_user
 
 router = APIRouter(prefix="/annotate", tags=["annotate"])
@@ -475,3 +480,61 @@ def import_shp(
         gdf = gpd.read_file(shp_files[0])
         features = json.loads(gdf.to_json())["features"]
         return _import_features(features, patch_id, month, class_id, user["user_id"])
+
+
+# ── System Models (Pre-trained Classification Heads) ──
+
+@router.get("/system-models")
+def get_system_models() -> list[dict]:
+    """列出所有可用的系统预训练分类头."""
+    return list_system_models()
+
+
+@router.get("/system-models/{model_id}/classes")
+def get_system_model_classes_route(model_id: str) -> list[dict]:
+    """获取系统模型的类别定义（名称 + 颜色）."""
+    try:
+        return get_system_model_classes(model_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/system-models/{model_id}/infer")
+def infer_system_model_route(
+    model_id: str,
+    patch_id: str,
+    month: str,
+) -> dict:
+    """使用系统预训练模型对指定 patch 推理.
+    
+    无需登录，所有用户共享系统模型。
+    """
+    try:
+        result_path = infer_system_model(model_id, patch_id, month)
+        return {"result_url": f"/api/annotate/system-model-results/{result_path.name}"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/system-model-results/{filename}")
+def get_system_model_result(filename: str) -> "FileResponse":
+    """获取系统模型推理结果图."""
+    from fastapi.responses import FileResponse
+    from app.config import settings
+    
+    results_dir = settings.project_root / "data" / "system_model_results"
+    file_path = results_dir / filename
+    
+    # Security: prevent directory traversal
+    if not str(file_path.resolve()).startswith(str(results_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Result image not found")
+    
+    return FileResponse(file_path, media_type="image/png")
+

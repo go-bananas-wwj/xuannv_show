@@ -27,3 +27,6 @@ data/user_annotations/models_index.json
 
 # SAM3 model weights
 backend/sam3/
+
+# System model auto-generated results
+data/system_model_results/

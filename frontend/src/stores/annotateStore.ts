@@ -78,6 +78,9 @@ interface AnnotateState {
   setTrainedModelPath: (path: string | null) => void
   setInferenceImageUrl: (url: string | null) => void
   setIsEmbeddingReady: (ready: boolean) => void
+  // System models
+  systemModels: Array<{ id: string; name: string; description: string; available: boolean }>
+  setSystemModels: (models: Array<{ id: string; name: string; description: string; available: boolean }>) => void
 }
 
 export const useAnnotateStore = create<AnnotateState>((set) => ({
@@ -93,6 +96,7 @@ export const useAnnotateStore = create<AnnotateState>((set) => ({
   trainedModelPath: null,
   inferenceImageUrl: null,
   isEmbeddingReady: false,
+  systemModels: [],
 
   setSelectedMonth: (month) => set({ selectedMonth: month }),
   setSelectedPatch: (patch) => set({ selectedPatch: patch, isEmbeddingReady: false, maskCandidates: [] }),
@@ -120,4 +124,5 @@ export const useAnnotateStore = create<AnnotateState>((set) => ({
   setTrainedModelPath: (path) => set({ trainedModelPath: path }),
   setInferenceImageUrl: (url) => set({ inferenceImageUrl: url }),
   setIsEmbeddingReady: (ready) => set({ isEmbeddingReady: ready }),
+  setSystemModels: (models) => set({ systemModels: models }),
 }))

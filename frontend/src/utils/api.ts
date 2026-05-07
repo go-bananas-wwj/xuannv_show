@@ -330,4 +330,40 @@ export async function markTourCompleted(): Promise<void> {
   await api.post('/auth/tour_completed')
 }
 
+// ── System Models API ──
+
+export interface SystemModel {
+  id: string
+  name: string
+  description: string
+  available: boolean
+}
+
+export interface SystemModelClass {
+  id: string
+  name: string
+  color: string
+}
+
+export async function listSystemModels(): Promise<SystemModel[]> {
+  const { data } = await api.get<SystemModel[]>('/annotate/system-models')
+  return data
+}
+
+export async function getSystemModelClasses(modelId: string): Promise<SystemModelClass[]> {
+  const { data } = await api.get<SystemModelClass[]>(`/annotate/system-models/${modelId}/classes`)
+  return data
+}
+
+export async function inferSystemModel(
+  modelId: string,
+  patchId: string,
+  month: string
+): Promise<{ result_url: string }> {
+  const { data } = await api.post(`/annotate/system-models/${modelId}/infer`, null, {
+    params: { patch_id: patchId, month },
+  })
+  return data
+}
+
 export default api

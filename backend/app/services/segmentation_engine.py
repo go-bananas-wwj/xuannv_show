@@ -122,7 +122,7 @@ class SegmentationEngine:
         pred_img = Image.fromarray(pred_rgb).resize((panel_size, panel_size), Image.Resampling.NEAREST)
 
         # 3. Ground Truth
-        gt_img = self._load_ground_truth(head_id, patch_id, panel_size)
+        gt_img = self._load_ground_truth(head_id, patch_id, panel_size, month)
 
         gap = 24
         total_w = panel_size * 3 + gap * 2
@@ -195,6 +195,7 @@ class SegmentationEngine:
         head_id: str,
         patch_id: str,
         out_size: int = 256,
+        month: str | None = None,
     ) -> Image.Image:
         """加载 Ground Truth 标签图并颜色编码."""
         source = _GT_SOURCE_MAP.get(head_id)
@@ -205,12 +206,27 @@ class SegmentationEngine:
         if not source_dir.exists():
             return self._make_placeholder(out_size, "无标签数据")
 
-        tifs = sorted(source_dir.glob("*.tif"))
+        tifs = list(source_dir.glob("*.tif"))
         if not tifs:
             return self._make_placeholder(out_size, "无标签数据")
 
+        # dynamic_world: 按月份匹配季度文件
+        selected_tif = None
+        if head_id == "dynamic_world" and month:
+            try:
+                year, mon = month.split("-")
+                quarter = ((int(mon) - 1) // 3) + 1
+                quarter_pattern = f"{year}Q{quarter}"
+                matched = [t for t in tifs if quarter_pattern in t.name]
+                if matched:
+                    selected_tif = matched[0]
+            except Exception:
+                pass
+        if selected_tif is None:
+            selected_tif = sorted(tifs)[0]
+
         try:
-            with rasterio.open(str(tifs[0])) as src:
+            with rasterio.open(str(selected_tif)) as src:
                 raw = src.read(1)
         except Exception:
             return self._make_placeholder(out_size, "标签读取失败")
@@ -225,13 +241,13 @@ class SegmentationEngine:
         # 标签值 → 类别索引映射
         if head_id == "jrc_water":
             mapped = np.full_like(raw_int, fill_value=-1)
-            mapped[raw_int == -128] = -1
-            mapped[raw_int <= 0] = 0
-            mapped[raw_int > 0] = 1
+            mapped[raw_int == -128] = -1   # no-data
+            mapped[raw_int == 0] = 0        # 非水体
+            mapped[raw_int > 0] = 1         # 水体
         elif head_id == "building_extraction":
             mapped = np.full_like(raw_int, fill_value=-1)
-            mapped[raw_int == 50] = 1   # Built-up → 建筑
-            mapped[raw_int > 0] = 0     # 其他 → 非建筑
+            mapped[raw_int == 1] = 1   # 建筑
+            mapped[raw_int == 0] = 0   # 非建筑
         else:
             # worldcover / dynamic_world: 标签值直接映射
             classes = self.models[head_id]["classes"]
