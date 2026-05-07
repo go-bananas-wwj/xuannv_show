@@ -69,6 +69,8 @@ export default function AnnotatePage() {
   const [patches, setPatches] = useState<PatchMeta[]>([])
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null)
+  const [beforeImageUrl, setBeforeImageUrl] = useState<string | null>(null)
+  const [beforeImageObj, setBeforeImageObj] = useState<HTMLImageElement | null>(null)
   const [maskObjs, setMaskObjs] = useState<HTMLImageElement[]>([])
   const [scale, setScale] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
@@ -105,6 +107,8 @@ export default function AnnotatePage() {
   const [isSystemPanelOpen, setIsSystemPanelOpen] = useState(true)
   const [systemInferring, setSystemInferring] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const leftCanvasRef = useRef<HTMLCanvasElement>(null)
+  const parentContainerRef = useRef<HTMLDivElement>(null)
   const [, setCdModels] = useState<Array<{ id: string; name: string; status: string; accuracy: number | null }>>([])
   const [isTrainingCD, setIsTrainingCD] = useState(false)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
@@ -246,6 +250,8 @@ export default function AnnotatePage() {
     if (!store.selectedPatch) {
       setImageUrl(null)
       setImageObj(null)
+      setBeforeImageUrl(null)
+      setBeforeImageObj(null)
       setMaskObjs([])
       setPoints([])
       setScale(1)
@@ -263,6 +269,14 @@ export default function AnnotatePage() {
     const month = store.annotationMode === 'change_detection' ? store.selectedAfterMonth : store.selectedMonth
     const url = `/api/patches/${patch.patch_id}/image?month=${month}&source=${dataSource}`
     setImageUrl(url)
+    // 变化检测模式下同时加载 Before 影像
+    if (store.annotationMode === 'change_detection') {
+      const beforeUrl = `/api/patches/${patch.patch_id}/image?month=${store.selectedBeforeMonth}&source=${dataSource}`
+      setBeforeImageUrl(beforeUrl)
+    } else {
+      setBeforeImageUrl(null)
+      setBeforeImageObj(null)
+    }
     setMaskObjs([])
     setPoints([])
     setScale(1)
@@ -271,7 +285,7 @@ export default function AnnotatePage() {
     store.setMaskCandidates([])
     setSamEnabled(false)
     setSamError(null)
-  }, [store.selectedPatch, store.selectedMonth, store.selectedAfterMonth, store.annotationMode, dataSource])
+  }, [store.selectedPatch, store.selectedMonth, store.selectedBeforeMonth, store.selectedAfterMonth, store.annotationMode, dataSource])
 
   // ── Load image object ──
   useEffect(() => {
@@ -286,6 +300,15 @@ export default function AnnotatePage() {
     img.onerror = () => setIsImageLoading(false)
     img.src = imageUrl
   }, [imageUrl])
+
+  // ── Load Before image object (change detection mode) ──
+  useEffect(() => {
+    if (!beforeImageUrl) { setBeforeImageObj(null); return }
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => setBeforeImageObj(img)
+    img.src = beforeImageUrl
+  }, [beforeImageUrl])
 
   // ── Load mask objects ──
   useEffect(() => {
@@ -345,9 +368,8 @@ export default function AnnotatePage() {
     })
   }, [store.annotations, store.classes, tintMask])
 
-  // ── Canvas render loop ──
-  useEffect(() => {
-    const canvas = canvasRef.current
+  // ── Shared canvas render function ──
+  const renderCanvas = useCallback((canvas: HTMLCanvasElement | null, img: HTMLImageElement | null) => {
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -364,29 +386,29 @@ export default function AnnotatePage() {
     ctx.scale(dpr, dpr)
     ctx.clearRect(0, 0, rect.width, rect.height)
 
-    if (!imageObj) {
+    if (!img) {
       ctx.fillStyle = '#f1f5f9'
       ctx.fillRect(0, 0, rect.width, rect.height)
       ctx.restore()
       return
     }
 
-    const imgW = imageObj.naturalWidth || 512
-    const imgH = imageObj.naturalHeight || 512
+    const imgW = img.naturalWidth || 512
+    const imgH = img.naturalHeight || 512
     const centerX = rect.width / 2
     const centerY = rect.height / 2
     const drawX = centerX + offset.x - (imgW * scale) / 2
     const drawY = centerY + offset.y - (imgH * scale) / 2
 
     // Base image
-    ctx.drawImage(imageObj, drawX, drawY, imgW * scale, imgH * scale)
+    ctx.drawImage(img, drawX, drawY, imgW * scale, imgH * scale)
 
-    // Image border (helps users see where the image is)
+    // Image border
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)'
     ctx.lineWidth = 1
     ctx.strokeRect(drawX, drawY, imgW * scale, imgH * scale)
 
-    // Mask preview overlay (tinted with class color)
+    // Mask preview overlay
     const tintedMask = tintedMaskObjs[store.selectedMaskIndex]
     if (tintedMask) {
       ctx.save()
@@ -395,20 +417,16 @@ export default function AnnotatePage() {
       ctx.restore()
     }
 
-    // Prompt points (LabelMe style)
+    // Prompt points
     for (const p of points) {
       const px = drawX + p.x * imgW * scale
       const py = drawY + p.y * imgH * scale
       const r = Math.max(3, 5 * scale)
       const color = p.label === 1 ? '#22c55e' : '#ef4444'
-
-      // Glow / fill
       ctx.beginPath()
       ctx.arc(px, py, r + 2, 0, Math.PI * 2)
       ctx.fillStyle = color + '20'
       ctx.fill()
-
-      // Main circle
       ctx.beginPath()
       ctx.arc(px, py, r, 0, Math.PI * 2)
       ctx.fillStyle = color + '60'
@@ -416,8 +434,6 @@ export default function AnnotatePage() {
       ctx.strokeStyle = color
       ctx.lineWidth = 2
       ctx.stroke()
-
-      // Icon (plus or minus)
       ctx.strokeStyle = 'white'
       ctx.lineWidth = 1.5
       if (p.label === 1) {
@@ -435,7 +451,7 @@ export default function AnnotatePage() {
       }
     }
 
-    // Finished geometry (polygon / polyline)
+    // Finished geometry
     if (finishedGeometry) {
       const pts = finishedGeometry.points
       if (pts.length >= 2) {
@@ -453,7 +469,6 @@ export default function AnnotatePage() {
         ctx.lineWidth = 2
         ctx.setLineDash([])
         ctx.stroke()
-        // Vertices
         for (const p of pts) {
           const vx = drawX + p.x * imgW * scale
           const vy = drawY + p.y * imgH * scale
@@ -468,10 +483,9 @@ export default function AnnotatePage() {
       }
     }
 
-    // In-progress drawing (polygon / polyline)
+    // In-progress drawing
     if ((drawMode === 'polygon' || drawMode === 'polyline') && drawingPoints.length > 0) {
       const pts = drawingPoints
-      // Solid lines between placed vertices
       ctx.beginPath()
       ctx.moveTo(drawX + pts[0].x * imgW * scale, drawY + pts[0].y * imgH * scale)
       for (let i = 1; i < pts.length; i++) {
@@ -481,8 +495,6 @@ export default function AnnotatePage() {
       ctx.lineWidth = 2
       ctx.setLineDash([])
       ctx.stroke()
-
-      // Dashed preview line from last vertex to mouse
       if (mousePos) {
         ctx.beginPath()
         ctx.moveTo(drawX + pts[pts.length - 1].x * imgW * scale, drawY + pts[pts.length - 1].y * imgH * scale)
@@ -493,8 +505,6 @@ export default function AnnotatePage() {
         ctx.stroke()
         ctx.setLineDash([])
       }
-
-      // For polygon: dashed closing edge from first vertex to mouse
       if (drawMode === 'polygon' && mousePos && pts.length >= 2) {
         ctx.beginPath()
         ctx.moveTo(drawX + pts[0].x * imgW * scale, drawY + pts[0].y * imgH * scale)
@@ -505,8 +515,6 @@ export default function AnnotatePage() {
         ctx.stroke()
         ctx.setLineDash([])
       }
-
-      // Vertex dots
       for (const p of pts) {
         const vx = drawX + p.x * imgW * scale
         const vy = drawY + p.y * imgH * scale
@@ -527,7 +535,6 @@ export default function AnnotatePage() {
       const isSelected = ann.id === selectedAnnotationId
       const lineWidth = isSelected ? 3 : 1.5
       const alpha = isSelected ? 0.5 : 0.25
-
       if (ann.geometry.type === 'polygon' || ann.geometry.type === 'polyline') {
         const pts = ann.geometry.points as Array<[number, number]>
         if (pts.length >= 2) {
@@ -545,8 +552,6 @@ export default function AnnotatePage() {
           ctx.lineWidth = lineWidth
           ctx.setLineDash([])
           ctx.stroke()
-
-          // Selected: white glow
           if (isSelected) {
             ctx.strokeStyle = 'white'
             ctx.lineWidth = 1
@@ -555,8 +560,6 @@ export default function AnnotatePage() {
             ctx.stroke()
             ctx.shadowBlur = 0
           }
-
-          // Vertices
           for (const p of pts) {
             const vx = drawX + p[0] * imgW * scale
             const vy = drawY + p[1] * imgH * scale
@@ -582,17 +585,24 @@ export default function AnnotatePage() {
       }
     }
 
-    // Crosshair in create mode (optional polish)
-    if (mode === 'create' && !isPanning && points.length === 0 && !store.isLoadingMask && drawingPoints.length === 0 && !finishedGeometry) {
-      // Subtle crosshair at center when no points
-    }
-
     ctx.restore()
-  }, [imageObj, tintedMaskObjs, scale, offset, points, store.selectedMaskIndex, mode, isPanning, drawMode, drawingPoints, mousePos, finishedGeometry, store.annotations, store.classes, selectedAnnotationId, savedMaskImages])
+  }, [offset, scale, points, tintedMaskObjs, store.selectedMaskIndex, store.annotations, store.classes, selectedAnnotationId, savedMaskImages, finishedGeometry, drawingPoints, mousePos, drawMode, hexToRgba])
+
+  // ── Canvas render loop (single + dual mode) ──
+  useEffect(() => {
+    if (store.annotationMode === 'change_detection') {
+      renderCanvas(leftCanvasRef.current, beforeImageObj)
+      renderCanvas(canvasRef.current, imageObj)
+    } else {
+      renderCanvas(canvasRef.current, imageObj)
+    }
+  }, [imageObj, beforeImageObj, store.annotationMode, renderCanvas])
 
   // ── Native wheel listener (non-passive) ──
   useEffect(() => {
-    const container = canvasContainerRef.current
+    const container = store.annotationMode === 'change_detection'
+      ? parentContainerRef.current
+      : canvasContainerRef.current
     if (!container) return
 
     const handleWheel = (e: WheelEvent) => {
@@ -616,11 +626,28 @@ export default function AnnotatePage() {
 
     container.addEventListener('wheel', handleWheel, { passive: false })
     return () => container.removeEventListener('wheel', handleWheel)
-  }, [imageUrl])
+  }, [imageUrl, store.annotationMode])
 
   // ── Coordinate mapping ──
   const screenToImage = useCallback((clientX: number, clientY: number) => {
-    const canvas = canvasRef.current
+    // Determine which canvas the event is on
+    let canvas: HTMLCanvasElement | null = null
+    if (store.annotationMode === 'change_detection') {
+      if (leftCanvasRef.current) {
+        const leftRect = leftCanvasRef.current.getBoundingClientRect()
+        if (clientX >= leftRect.left && clientX < leftRect.right && clientY >= leftRect.top && clientY < leftRect.bottom) {
+          canvas = leftCanvasRef.current
+        }
+      }
+      if (!canvas && canvasRef.current) {
+        const rightRect = canvasRef.current.getBoundingClientRect()
+        if (clientX >= rightRect.left && clientX < rightRect.right && clientY >= rightRect.top && clientY < rightRect.bottom) {
+          canvas = canvasRef.current
+        }
+      }
+    } else {
+      canvas = canvasRef.current
+    }
     if (!canvas || !imageObj) return null
     const rect = canvas.getBoundingClientRect()
     const cx = clientX - rect.left
@@ -638,7 +665,7 @@ export default function AnnotatePage() {
 
     if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return null
     return { x: nx, y: ny }
-  }, [imageObj, scale, offset])
+  }, [imageObj, scale, offset, store.annotationMode])
 
   // ── Mouse handlers ──
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -1142,56 +1169,45 @@ export default function AnnotatePage() {
                   </div>
 
                   {store.annotationMode === 'change_detection' && store.selectedPatch ? (
-                    /* 变化检测模式：左右并排双期视图 */
-                    <div className="absolute inset-0 flex">
-                      {/* Left: Before image (read-only) */}
+                    /* 变化检测模式：左右并排双 canvas 协同 */
+                    <div
+                      ref={parentContainerRef}
+                      className={cn(
+                        'absolute inset-0 flex',
+                        isSpacePressed ? 'cursor-grab' : mode === 'create' ? 'cursor-crosshair' : 'cursor-default'
+                      )}
+                      onMouseDown={handleMouseDown}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
+                      onDoubleClick={finishDrawing}
+                      onContextMenu={(e) => e.preventDefault()}
+                    >
+                      {/* Left: Before canvas */}
                       <div className="w-1/2 relative border-r-2 border-slate-300 bg-slate-900">
-                        <img
-                          src={`/api/patches/${store.selectedPatch.patch_id}/image?month=${store.selectedBeforeMonth}&source=${dataSource}`}
-                          className="w-full h-full object-contain"
-                          alt={`Before ${store.selectedBeforeMonth}`}
-                          draggable={false}
-                        />
+                        <canvas ref={leftCanvasRef} className="w-full h-full block" />
                         <div className="absolute top-3 left-3 bg-black/60 text-white text-xs px-2.5 py-1 rounded-md font-medium pointer-events-none">
                           变化前 · {store.selectedBeforeMonth}
                         </div>
                       </div>
-                      {/* Right: After canvas (interactive) */}
+                      {/* Right: After canvas */}
                       <div className="w-1/2 relative">
-                        <div
-                          id="tour-step-canvas"
-                          ref={canvasContainerRef}
-                          className={cn(
-                            'absolute inset-0',
-                            isSpacePressed ? 'cursor-grab' : mode === 'create' ? 'cursor-crosshair' : 'cursor-default'
-                          )}
-                          onMouseDown={handleMouseDown}
-                          onMouseMove={handleMouseMove}
-                          onMouseUp={handleMouseUp}
-                          onMouseLeave={handleMouseUp}
-                          onDoubleClick={finishDrawing}
-                          onContextMenu={(e) => e.preventDefault()}
-                        >
-                          <canvas
-                            ref={canvasRef}
-                            className="w-full h-full block"
-                          />
-                          {/* Loading overlay */}
-                          {(isImageLoading || store.isLoadingMask) && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-20 pointer-events-none">
-                              <div className="flex flex-col items-center gap-2">
-                                <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
-                                <span className="text-sm text-slate-500">
-                                  {isImageLoading ? '影像加载中...' : 'SAM 分割中...'}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        <canvas ref={canvasRef} className="w-full h-full block" />
                         <div className="absolute top-3 left-3 bg-sky-600/80 text-white text-xs px-2.5 py-1 rounded-md font-medium pointer-events-none">
                           变化后 · {store.selectedAfterMonth}
                         </div>
                       </div>
+                      {/* Loading overlay */}
+                      {(isImageLoading || store.isLoadingMask) && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-20 pointer-events-none">
+                          <div className="flex flex-col items-center gap-2">
+                            <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
+                            <span className="text-sm text-slate-500">
+                              {isImageLoading ? '影像加载中...' : 'SAM 分割中...'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     /* 单期分割模式：单一画布 */
