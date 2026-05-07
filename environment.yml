@@ -16,3 +16,7 @@ dependencies:
     - pydantic==2.9.2
     - scikit-learn
     - pyproj
+    - einops
+    - pycocotools
+    - psutil
+    - timm>=1.0.17
