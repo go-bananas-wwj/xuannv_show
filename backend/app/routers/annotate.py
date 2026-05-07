@@ -5,8 +5,9 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, UploadFile, File
 from pydantic import BaseModel
+import json
 
 from app.services.annotate_engine import (
     get_class_manager,
@@ -41,10 +42,27 @@ def create_class(req: ClassCreate, user: dict = Depends(get_current_user)) -> di
     mgr = get_class_manager(user["user_id"])
     return mgr.create_class(req.name, req.color)
 
+class ClassRenameRequest(BaseModel):
+    name: str
+
+
 @router.delete("/classes/{class_id}")
 def delete_class(class_id: str, user: dict = Depends(get_current_user)) -> dict:
     mgr = get_class_manager(user["user_id"])
+    store = get_annotation_store(user["user_id"])
+    # 级联删除：先删除该类别的所有标注
+    for ann in store.list_annotations():
+        if ann.get("class_id") == class_id:
+            store.delete_annotation(ann["id"])
     mgr.delete_class(class_id)
+    return {"status": "ok"}
+
+
+@router.patch("/classes/{class_id}")
+def rename_class(class_id: str, req: ClassRenameRequest, user: dict = Depends(get_current_user)) -> dict:
+    mgr = get_class_manager(user["user_id"])
+    if not mgr.rename_class(class_id, req.name):
+        raise HTTPException(status_code=404, detail="Class not found")
     return {"status": "ok"}
 
 # ── SAM Preloading & Segmentation ──
@@ -350,3 +368,110 @@ def get_infer_result(filename: str, user: dict = Depends(get_current_user)) -> b
         raise HTTPException(status_code=404, detail="Result not found")
     from fastapi.responses import FileResponse
     return FileResponse(str(image_path))
+
+
+# ── Import external annotations (GeoJSON / SHP) ──
+
+import zipfile
+import tempfile
+
+
+class GeoJSONImportRequest(BaseModel):
+    patch_id: str
+    month: str
+    class_id: str
+    geojson: dict
+
+
+def _normalize_coords(coords: list, size: int = 256) -> list[list[float]]:
+    """Convert coordinates to normalized [0,1] range."""
+    # If coords look like pixel coords (> 1), normalize by size
+    max_val = max(abs(c[0]) for c in coords) if coords else 0
+    if max_val > 1.5:
+        factor = size
+    else:
+        factor = 1.0
+    return [[c[0] / factor, c[1] / factor] for c in coords]
+
+
+def _import_features(features: list[dict], patch_id: str, month: str, class_id: str, user_id: str) -> dict:
+    """Import GeoJSON features as annotations."""
+    store = get_annotation_store(user_id)
+    created = 0
+    skipped = 0
+    for feat in features:
+        geom = feat.get("geometry", {})
+        geom_type = geom.get("type", "")
+        coords = geom.get("coordinates", [])
+        if not coords:
+            skipped += 1
+            continue
+        if geom_type == "Polygon":
+            # coords[0] is the outer ring
+            ring = coords[0] if isinstance(coords[0], list) and coords[0] else []
+            pts = _normalize_coords(ring)
+            if len(pts) >= 3:
+                store.create_annotation(
+                    patch_id=patch_id,
+                    month=month,
+                    class_id=class_id,
+                    score=1.0,
+                    geometry={"type": "polygon", "points": pts},
+                )
+                created += 1
+            else:
+                skipped += 1
+        elif geom_type == "MultiPolygon":
+            for poly in coords:
+                ring = poly[0] if isinstance(poly, list) and poly else []
+                pts = _normalize_coords(ring)
+                if len(pts) >= 3:
+                    store.create_annotation(
+                        patch_id=patch_id,
+                        month=month,
+                        class_id=class_id,
+                        score=1.0,
+                        geometry={"type": "polygon", "points": pts},
+                    )
+                    created += 1
+                else:
+                    skipped += 1
+        else:
+            skipped += 1
+    return {"status": "ok", "created": created, "skipped": skipped}
+
+
+@router.post("/annotations/import_geojson")
+def import_geojson(req: GeoJSONImportRequest, user: dict = Depends(get_current_user)) -> dict:
+    """Import annotations from GeoJSON FeatureCollection."""
+    features = req.geojson.get("features", [])
+    if not features:
+        raise HTTPException(status_code=400, detail="No features found in GeoJSON")
+    return _import_features(features, req.patch_id, req.month, req.class_id, user["user_id"])
+
+
+@router.post("/annotations/import_shp")
+def import_shp(
+    patch_id: str,
+    month: str,
+    class_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Import annotations from SHP file (uploaded as ZIP)."""
+    import geopandas as gpd
+    if not file.filename or not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Please upload a ZIP file containing .shp, .shx, .dbf")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        zip_path = Path(tmpdir) / "upload.zip"
+        zip_path.write_bytes(file.file.read())
+        with zipfile.ZipFile(zip_path, "r") as z:
+            z.extractall(tmpdir)
+        # Find .shp file
+        shp_files = list(Path(tmpdir).glob("*.shp"))
+        if not shp_files:
+            raise HTTPException(status_code=400, detail="No .shp file found in ZIP")
+        gdf = gpd.read_file(shp_files[0])
+        features = json.loads(gdf.to_json())["features"]
+        return _import_features(features, patch_id, month, class_id, user["user_id"])

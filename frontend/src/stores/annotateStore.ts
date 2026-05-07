@@ -66,6 +66,7 @@ interface AnnotateState {
   setClasses: (classes: ClassDef[]) => void
   addClass: (cls: ClassDef) => void
   removeClass: (id: string) => void
+  updateClassName: (id: string, name: string) => void
   setActiveClassId: (id: string | null) => void
   setAnnotations: (annotations: Annotation[]) => void
   addAnnotation: (ann: Annotation) => void
@@ -103,6 +104,9 @@ export const useAnnotateStore = create<AnnotateState>((set) => ({
   removeClass: (id) => set((state) => ({
     classes: state.classes.filter((c) => c.id !== id),
     activeClassId: state.activeClassId === id ? null : state.activeClassId,
+  })),
+  updateClassName: (id, name) => set((state) => ({
+    classes: state.classes.map((c) => c.id === id ? { ...c, name } : c),
   })),
   setActiveClassId: (id) => set({ activeClassId: id }),
   setAnnotations: (annotations) => set({ annotations }),

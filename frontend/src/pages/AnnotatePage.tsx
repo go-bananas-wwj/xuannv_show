@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowLeftCircle, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X, Hand, MousePointer2, GraduationCap } from 'lucide-react'
+import { ArrowLeft, ArrowLeftCircle, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X, Hand, MousePointer2, GraduationCap, Pencil } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useAnnotateStore } from '@/stores/annotateStore'
 import { useTourStore } from '@/stores/tourStore'
@@ -8,7 +8,9 @@ import { useAuthStore } from '@/stores/authStore'
 import { useAnnotateTour } from '@/hooks/useDriverTour'
 import {
   fetchPatches, preloadSAM3Embedding, segmentWithSAM,
-  fetchClasses, createClass, fetchAnnotations, saveAnnotation, deleteAnnotation,
+  fetchClasses, createClass, deleteClass, renameClass,
+  fetchAnnotations, saveAnnotation, deleteAnnotation,
+  importGeoJSON, importSHP,
 } from '@/utils/api'
 import type { PatchMeta } from '@/types'
 import PatchMosaicSelector from '@/components/PatchMosaicSelector'
@@ -73,6 +75,8 @@ export default function AnnotatePage() {
   const [isAddingClass, setIsAddingClass] = useState(false)
   const [newClassName, setNewClassName] = useState('')
   const [newClassColor, setNewClassColor] = useState('#FF4444')
+  const [editingClassId, setEditingClassId] = useState<string | null>(null)
+  const [editingClassName, setEditingClassName] = useState('')
   const [isTraining, setIsTraining] = useState(false)
   const [showInference, setShowInference] = useState(false)
   const [isImageLoading, setIsImageLoading] = useState(false)
@@ -86,6 +90,8 @@ export default function AnnotatePage() {
   const [dataSource, setDataSource] = useState<'s2' | 's1' | 'landsat'>('s2')
   const [showTrainDialog, setShowTrainDialog] = useState(false)
   const [trainModelName, setTrainModelName] = useState('')
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null)
+  const [savedMaskImages, setSavedMaskImages] = useState<Record<string, HTMLCanvasElement>>({})
   const navigate = useNavigate()
   const [drawingPoints, setDrawingPoints] = useState<Array<{x: number, y: number}>>([])
   const [mousePos, setMousePos] = useState<{x: number, y: number} | null>(null)
@@ -105,6 +111,14 @@ export default function AnnotatePage() {
     ctx.globalCompositeOperation = 'destination-in'
     ctx.drawImage(maskImg, 0, 0)
     return c
+  }, [])
+
+  // ── Hex color to RGBA ──
+  const hexToRgba = useCallback((hex: string, alpha: number): string => {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }, [])
 
   useEffect(() => {
@@ -211,6 +225,34 @@ export default function AnnotatePage() {
     const tintColor = activeClass?.color || '#00ffff'
     setTintedMaskObjs(maskObjs.map(raw => tintMask(raw, tintColor)))
   }, [store.activeClassId, store.classes])
+
+  // ── Preload saved annotation mask images ──
+  useEffect(() => {
+    const maskAnns = store.annotations.filter(a => a.geometry.type === 'mask')
+    const toLoad = maskAnns.filter(a => !savedMaskImages[a.id])
+    if (toLoad.length === 0) return
+
+    const newImages: Record<string, HTMLCanvasElement> = {}
+    let loaded = 0
+    toLoad.forEach(ann => {
+      const cls = store.classes.find(c => c.id === ann.class_id)
+      const img = new Image()
+      img.onload = () => {
+        newImages[ann.id] = tintMask(img, cls?.color || '#00ffff')
+        loaded++
+        if (loaded === toLoad.length) {
+          setSavedMaskImages(prev => ({ ...prev, ...newImages }))
+        }
+      }
+      img.onerror = () => {
+        loaded++
+        if (loaded === toLoad.length) {
+          setSavedMaskImages(prev => ({ ...prev, ...newImages }))
+        }
+      }
+      img.src = `data:image/png;base64,${(ann.geometry as { mask_b64: string }).mask_b64}`
+    })
+  }, [store.annotations, store.classes, tintMask])
 
   // ── Canvas render loop ──
   useEffect(() => {
@@ -387,13 +429,75 @@ export default function AnnotatePage() {
       }
     }
 
+    // Saved annotations overlay
+    for (const ann of store.annotations) {
+      const cls = store.classes.find(c => c.id === ann.class_id)
+      const color = cls?.color || '#999'
+      const isSelected = ann.id === selectedAnnotationId
+      const lineWidth = isSelected ? 3 : 1.5
+      const alpha = isSelected ? 0.5 : 0.25
+
+      if (ann.geometry.type === 'polygon' || ann.geometry.type === 'polyline') {
+        const pts = ann.geometry.points as Array<[number, number]>
+        if (pts.length >= 2) {
+          ctx.beginPath()
+          ctx.moveTo(drawX + pts[0][0] * imgW * scale, drawY + pts[0][1] * imgH * scale)
+          for (let i = 1; i < pts.length; i++) {
+            ctx.lineTo(drawX + pts[i][0] * imgW * scale, drawY + pts[i][1] * imgH * scale)
+          }
+          if (ann.geometry.type === 'polygon') {
+            ctx.closePath()
+            ctx.fillStyle = hexToRgba(color, alpha)
+            ctx.fill()
+          }
+          ctx.strokeStyle = color
+          ctx.lineWidth = lineWidth
+          ctx.setLineDash([])
+          ctx.stroke()
+
+          // Selected: white glow
+          if (isSelected) {
+            ctx.strokeStyle = 'white'
+            ctx.lineWidth = 1
+            ctx.shadowColor = 'white'
+            ctx.shadowBlur = 8
+            ctx.stroke()
+            ctx.shadowBlur = 0
+          }
+
+          // Vertices
+          for (const p of pts) {
+            const vx = drawX + p[0] * imgW * scale
+            const vy = drawY + p[1] * imgH * scale
+            ctx.beginPath()
+            ctx.arc(vx, vy, isSelected ? 5 : 3, 0, Math.PI * 2)
+            ctx.fillStyle = color
+            ctx.fill()
+            if (isSelected) {
+              ctx.strokeStyle = 'white'
+              ctx.lineWidth = 1.5
+              ctx.stroke()
+            }
+          }
+        }
+      } else if (ann.geometry.type === 'mask') {
+        const maskImg = savedMaskImages[ann.id]
+        if (maskImg) {
+          ctx.save()
+          ctx.globalAlpha = isSelected ? 0.6 : 0.3
+          ctx.drawImage(maskImg, drawX, drawY, imgW * scale, imgH * scale)
+          ctx.restore()
+        }
+      }
+    }
+
     // Crosshair in create mode (optional polish)
     if (mode === 'create' && !isPanning && points.length === 0 && !store.isLoadingMask && drawingPoints.length === 0 && !finishedGeometry) {
       // Subtle crosshair at center when no points
     }
 
     ctx.restore()
-  }, [imageObj, tintedMaskObjs, scale, offset, points, store.selectedMaskIndex, mode, isPanning, drawMode, drawingPoints, mousePos, finishedGeometry])
+  }, [imageObj, tintedMaskObjs, scale, offset, points, store.selectedMaskIndex, mode, isPanning, drawMode, drawingPoints, mousePos, finishedGeometry, store.annotations, store.classes, selectedAnnotationId, savedMaskImages])
 
   // ── Native wheel listener (non-passive) ──
   useEffect(() => {
@@ -401,7 +505,6 @@ export default function AnnotatePage() {
     if (!container) return
 
     const handleWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return
       e.preventDefault()
 
       const rect = container.getBoundingClientRect()
@@ -834,14 +937,17 @@ export default function AnnotatePage() {
             {/* Toolbar */}
             <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-slate-200">
               <div className="flex items-center gap-2">
-                <button onClick={() => setScale(s => Math.min(s * 1.2, 8))} className="p-1.5 rounded hover:bg-slate-100" title="放大">
-                  <ZoomIn className="w-4 h-4 text-slate-500" />
+                <button onClick={() => setScale(s => Math.min(s * 1.2, 8))} className="flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100 text-xs text-slate-500" title="放大">
+                  <ZoomIn className="w-4 h-4" />
+                  <span className="hidden sm:inline">放大</span>
                 </button>
-                <button onClick={() => setScale(s => Math.max(s / 1.2, 0.3))} className="p-1.5 rounded hover:bg-slate-100" title="缩小">
-                  <ZoomOut className="w-4 h-4 text-slate-500" />
+                <button onClick={() => setScale(s => Math.max(s / 1.2, 0.3))} className="flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100 text-xs text-slate-500" title="缩小">
+                  <ZoomOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">缩小</span>
                 </button>
-                <button onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }) }} className="p-1.5 rounded hover:bg-slate-100" title="重置视图">
-                  <Maximize className="w-4 h-4 text-slate-500" />
+                <button onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }) }} className="flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100 text-xs text-slate-500" title="重置视图">
+                  <Maximize className="w-4 h-4" />
+                  <span className="hidden sm:inline">重置</span>
                 </button>
                 <span className="text-xs text-slate-400 ml-1">{Math.round(scale * 100)}%</span>
                 <span className="w-px h-4 bg-slate-200 mx-1" />
@@ -1249,16 +1355,115 @@ export default function AnnotatePage() {
                     )}
                   >
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cls.color }} />
-                    <span className="flex-1">{cls.name}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); store.removeClass(cls.id) }}
-                      className="text-slate-400 hover:text-red-500"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {editingClassId === cls.id ? (
+                      <>
+                        <input
+                          type="text"
+                          value={editingClassName}
+                          onChange={(e) => setEditingClassName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              renameClass(cls.id, editingClassName).then(() => {
+                                store.updateClassName(cls.id, editingClassName)
+                                setEditingClassId(null)
+                              }).catch(console.error)
+                            }
+                            if (e.key === 'Escape') setEditingClassId(null)
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          autoFocus
+                          className="flex-1 text-sm border border-slate-200 rounded px-2 py-0.5"
+                        />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            renameClass(cls.id, editingClassName).then(() => {
+                              store.updateClassName(cls.id, editingClassName)
+                              setEditingClassId(null)
+                            }).catch(console.error)
+                          }}
+                          className="text-sky-500 hover:text-sky-600"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1">{cls.name}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditingClassId(cls.id)
+                            setEditingClassName(cls.name)
+                          }}
+                          className="text-slate-400 hover:text-sky-500"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            if (!confirm(`确定删除类别 "${cls.name}"？关联的 ${store.annotations.filter(a => a.class_id === cls.id).length} 条标注也将被删除。`)) return
+                            try {
+                              await deleteClass(cls.id)
+                              store.removeClass(cls.id)
+                            } catch (err) {
+                              console.error('Failed to delete class:', err)
+                            }
+                          }}
+                          className="text-slate-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Import external annotations */}
+            <div className="p-3 border-b border-slate-100">
+              <span className="text-xs font-medium text-slate-500 mb-2 block">导入外部标注</span>
+              <input
+                type="file"
+                accept=".geojson,.json,.zip"
+                id="import-annotations"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file || !store.selectedPatch) return
+                  if (!store.activeClassId) {
+                    alert('请先选择一个类别')
+                    return
+                  }
+                  try {
+                    let result
+                    if (file.name.endsWith('.zip')) {
+                      result = await importSHP(store.selectedPatch.patch_id, store.selectedMonth, store.activeClassId, file)
+                    } else {
+                      const text = await file.text()
+                      const geojson = JSON.parse(text)
+                      result = await importGeoJSON(store.selectedPatch.patch_id, store.selectedMonth, store.activeClassId, geojson)
+                    }
+                    alert(`导入完成：成功 ${result.created} 条，跳过 ${result.skipped} 条`)
+                    // Refresh annotations
+                    const anns = await fetchAnnotations()
+                    store.setAnnotations(anns)
+                  } catch (err: any) {
+                    alert('导入失败：' + (err.message || '未知错误'))
+                  }
+                  e.target.value = ''
+                }}
+              />
+              <label
+                htmlFor="import-annotations"
+                className="flex items-center justify-center gap-2 w-full px-3 py-2 text-sm text-slate-600 bg-slate-50 border border-dashed border-slate-300 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>上传 GeoJSON / SHP</span>
+              </label>
+              <p className="text-[10px] text-slate-400 mt-1 text-center">支持 .geojson 或 .zip (SHP)</p>
             </div>
 
             {/* Annotations list */}
@@ -1269,10 +1474,17 @@ export default function AnnotatePage() {
               <div className="space-y-2">
                 {store.annotations.map((ann) => {
                   const cls = store.classes.find((c) => c.id === ann.class_id)
+                  const isSelected = ann.id === selectedAnnotationId
                   return (
                     <div
                       key={ann.id}
-                      className="flex items-center gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50"
+                      onClick={() => setSelectedAnnotationId(isSelected ? null : ann.id)}
+                      className={cn(
+                        'flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors',
+                        isSelected
+                          ? 'bg-sky-50 border-sky-300 ring-1 ring-sky-200'
+                          : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
+                      )}
                     >
                       <span
                         className="w-3 h-3 rounded-full flex-shrink-0"
@@ -1283,7 +1495,7 @@ export default function AnnotatePage() {
                         <div className="text-xs text-slate-400">{ann.patch_id} / {ann.month}</div>
                       </div>
                       <button
-                        onClick={() => handleDeleteAnnotation(ann.id)}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteAnnotation(ann.id) }}
                         className="text-slate-400 hover:text-red-500 p-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

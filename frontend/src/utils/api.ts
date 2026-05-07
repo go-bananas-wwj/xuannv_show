@@ -118,6 +118,10 @@ export async function deleteClass(id: string): Promise<void> {
   await api.delete(`/annotate/classes/${id}`)
 }
 
+export async function renameClass(id: string, name: string): Promise<void> {
+  await api.patch(`/annotate/classes/${id}`, { name })
+}
+
 // Annotations CRUD
 export interface GeometryMask {
   type: 'mask'
@@ -166,6 +170,23 @@ export async function saveAnnotation(ann: AnnotationCreate): Promise<Annotation>
 
 export async function deleteAnnotation(id: string): Promise<void> {
   await api.delete(`/annotate/annotations/${id}`)
+}
+
+export async function importGeoJSON(patchId: string, month: string, classId: string, geojson: object): Promise<{ status: string; created: number; skipped: number }> {
+  const { data } = await api.post('/annotate/annotations/import_geojson', { patch_id: patchId, month, class_id: classId, geojson })
+  return data
+}
+
+export async function importSHP(patchId: string, month: string, classId: string, file: File): Promise<{ status: string; created: number; skipped: number }> {
+  const form = new FormData()
+  form.append('patch_id', patchId)
+  form.append('month', month)
+  form.append('class_id', classId)
+  form.append('file', file)
+  const { data } = await api.post('/annotate/annotations/import_shp', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
 }
 
 // Training

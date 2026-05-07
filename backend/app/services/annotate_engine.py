@@ -83,6 +83,15 @@ class ClassManager:
         classes = [c for c in classes if c["id"] != class_id]
         self._save(classes)
 
+    def rename_class(self, class_id: str, new_name: str) -> bool:
+        classes = self._load()
+        for c in classes:
+            if c["id"] == class_id:
+                c["name"] = new_name
+                self._save(classes)
+                return True
+        return False
+
 
 # ── Annotation Store ──
 class AnnotationStore:
