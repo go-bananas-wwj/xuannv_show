@@ -3,20 +3,8 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - nodejs=20
   - python=3.11
+  - nodejs=20
   - pip
   - pip:
-    - fastapi==0.115.0
-    - uvicorn[standard]==0.32.0
-    - python-multipart==0.0.17
-    - numpy==1.26.4
-    - pillow==11.0.0
-    - rasterio==1.4.2
-    - pydantic==2.9.2
-    - scikit-learn
-    - pyproj
-    - einops
-    - pycocotools
-    - psutil
-    - timm>=1.0.17
+    - -r backend/requirements.txt

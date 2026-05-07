@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+*.egg
+
+# Node.js
+node_modules
+frontend/node_modules
+frontend/dist
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data (large files, mount as volume)
+data/harbin/embeddings/
+data/harbin/patches/
+
+# Tests
+tests/
+
+# Docs
+docs/
+
+# Environment
+.env
+.env.*
