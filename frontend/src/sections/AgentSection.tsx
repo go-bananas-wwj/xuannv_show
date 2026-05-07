@@ -1,37 +1,110 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bot, FileText, BarChart3 } from 'lucide-react'
+import { Bot, FileText, BarChart3, Loader2, CheckCircle2, AlertCircle, Wrench } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import AgentPromptInput from '@/components/AgentPromptInput'
 import StatisticsChart from '@/components/StatisticsChart'
 import ExportButtons from '@/components/ExportButtons'
 import GlassPanel from '@/components/GlassPanel'
-import { submitAgentTask } from '@/utils/api'
+import { submitAgentTaskAsync, getAgentTaskStatus } from '@/utils/api'
 import config from '@/config.json'
-import type { AgentTaskResponse } from '@/types'
+import type { AgentTaskStatus } from '@/types'
+
+const POLL_INTERVAL = 2000  // 2s
+const MAX_POLL_TIME = 120000  // 120s
 
 export default function AgentSection() {
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<AgentTaskResponse | null>(null)
+  const [taskStatus, setTaskStatus] = useState<AgentTaskStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [elapsed, setElapsed] = useState(0)
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const startTimeRef = useRef<number>(0)
+
+  const clearPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => clearPolling()
+  }, [clearPolling])
+
+  // Elapsed timer
+  useEffect(() => {
+    if (!loading) return
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [loading])
 
   const handleSubmit = async () => {
     if (!prompt.trim()) return
     setLoading(true)
     setError(null)
-    setResult(null)
+    setTaskStatus(null)
+    setElapsed(0)
+    startTimeRef.current = Date.now()
 
     try {
-      const response = await submitAgentTask({
+      const { task_id } = await submitAgentTaskAsync({
         prompt,
         region: config.region,
       })
-      setResult(response)
+
+      // Start polling
+      pollTimerRef.current = setInterval(async () => {
+        try {
+          const status = await getAgentTaskStatus(task_id)
+          setTaskStatus(status)
+
+          if (status.status === 'completed' || status.status === 'failed') {
+            clearPolling()
+            setLoading(false)
+          }
+
+          // Timeout guard
+          if (Date.now() - startTimeRef.current > MAX_POLL_TIME) {
+            clearPolling()
+            setLoading(false)
+            setError('任务超时，请稍后重试')
+          }
+        } catch (err) {
+          clearPolling()
+          setLoading(false)
+          setError(err instanceof Error ? err.message : '轮询失败')
+        }
+      }, POLL_INTERVAL)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '提交失败')
-    } finally {
       setLoading(false)
+      setError(err instanceof Error ? err.message : '提交失败')
     }
+  }
+
+  const renderStatusBadge = () => {
+    if (!taskStatus) return null
+    const statusConfig = {
+      pending: { icon: Loader2, text: '排队中', color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200' },
+      running: { icon: Loader2, text: '分析中', color: 'text-violet-500', bg: 'bg-violet-50', border: 'border-violet-200' },
+      completed: { icon: CheckCircle2, text: '已完成', color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+      failed: { icon: AlertCircle, text: '失败', color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200' },
+    }
+    const cfg = statusConfig[taskStatus.status]
+    const Icon = cfg.icon
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.color} border ${cfg.border}`}>
+        <Icon className={`w-3.5 h-3.5 ${taskStatus.status === 'pending' || taskStatus.status === 'running' ? 'animate-spin' : ''}`} />
+        {cfg.text}
+        {taskStatus.status === 'running' && taskStatus.elapsed_seconds !== null && (
+          <span className="text-slate-400 ml-1">{taskStatus.elapsed_seconds.toFixed(0)}s</span>
+        )}
+      </span>
+    )
   }
 
   return (
@@ -67,7 +140,7 @@ export default function AgentSection() {
 
           <div className="space-y-4">
             <AnimatePresence mode="wait">
-              {loading && (
+              {loading && !taskStatus?.result && (
                 <motion.div
                   key="loading"
                   initial={{ opacity: 0 }}
@@ -79,8 +152,13 @@ export default function AgentSection() {
                       <div className="w-10 h-10 border-2 border-violet-300 border-t-violet-500 rounded-full animate-spin mb-4" />
                       <p className="text-slate-500">智能体分析中...</p>
                       <p className="text-slate-400 text-sm mt-1">
-                        正在解析需求并调用对应 Task Head
+                        已用时 {elapsed}s，正在调用 DeepSeek 解析需求
                       </p>
+                      {taskStatus && (
+                        <div className="mt-4 flex items-center gap-2">
+                          {renderStatusBadge()}
+                        </div>
+                      )}
                     </div>
                   </GlassPanel>
                 </motion.div>
@@ -94,12 +172,23 @@ export default function AgentSection() {
                   exit={{ opacity: 0 }}
                 >
                   <GlassPanel className="p-6 border-red-200">
-                    <p className="text-red-500">{error}</p>
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-red-500 font-medium">任务失败</p>
+                        <p className="text-red-400 text-sm mt-1">{error}</p>
+                        {taskStatus?.error && (
+                          <pre className="mt-3 p-3 bg-red-50 rounded-lg text-xs text-red-600 overflow-auto max-h-40">
+                            {taskStatus.error}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
                   </GlassPanel>
                 </motion.div>
               )}
 
-              {result && !loading && (
+              {taskStatus?.result && !loading && (
                 <motion.div
                   key="result"
                   initial={{ opacity: 0, y: 10 }}
@@ -107,6 +196,18 @@ export default function AgentSection() {
                   exit={{ opacity: 0 }}
                   className="space-y-4"
                 >
+                  {/* Status header */}
+                  <div className="flex items-center justify-between">
+                    {renderStatusBadge()}
+                    {taskStatus.result.tools_used && taskStatus.result.tools_used.length > 0 && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <Wrench className="w-3 h-3" />
+                        使用了 {taskStatus.result.tools_used.join(', ')}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Report */}
                   <GlassPanel className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
@@ -115,23 +216,27 @@ export default function AgentSection() {
                       </div>
                       <ExportButtons />
                     </div>
-                    <div
-                      className="prose prose-slate prose-sm max-w-none"
-                      dangerouslySetInnerHTML={{ __html: result.report_html }}
-                    />
+                    <div className="prose prose-slate prose-sm max-w-none">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {taskStatus.result.report_markdown}
+                      </ReactMarkdown>
+                    </div>
                   </GlassPanel>
 
-                  <GlassPanel className="p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                      <BarChart3 className="w-5 h-5 text-sky-500" />
-                      <h3 className="font-medium text-slate-700">统计图表</h3>
-                    </div>
-                    <StatisticsChart statistics={result.statistics} />
-                  </GlassPanel>
+                  {/* Statistics */}
+                  {taskStatus.result.statistics && (
+                    <GlassPanel className="p-6">
+                      <div className="flex items-center gap-2 mb-4">
+                        <BarChart3 className="w-5 h-5 text-sky-500" />
+                        <h3 className="font-medium text-slate-700">统计图表</h3>
+                      </div>
+                      <StatisticsChart statistics={taskStatus.result.statistics} />
+                    </GlassPanel>
+                  )}
                 </motion.div>
               )}
 
-              {!result && !loading && !error && (
+              {!taskStatus?.result && !loading && !error && (
                 <motion.div
                   key="empty"
                   initial={{ opacity: 0 }}

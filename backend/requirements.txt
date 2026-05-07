@@ -34,3 +34,6 @@ timm>=1.0.17
 
 # --- Utilities ---
 requests>=2.30.0
+
+# --- LLM ---
+openai>=1.60.0

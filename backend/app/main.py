@@ -22,6 +22,7 @@ import sys
 sys.path.insert(0, str(settings.xuannv_root))
 
 from app.routers import patches, embeddings, heads, agent, annotate, auth
+from app.services.agent_engine import start_cleanup_loop
 
 
 # ── Patch Image LRU Cache ──
@@ -99,6 +100,10 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(client.warmup)
     except Exception as e:
         print(f"[startup] SAM3 warmup failed (will lazy-load on first request): {e}")
+    
+    # 启动 Agent 任务清理循环
+    start_cleanup_loop()
+    
     yield
     print("[shutdown] Cleaning up...")
 

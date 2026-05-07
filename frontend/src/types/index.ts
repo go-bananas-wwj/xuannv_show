@@ -52,6 +52,33 @@ export interface AgentTaskResponse {
   }
 }
 
+export interface AgentTaskSubmitResponse {
+  task_id: string
+  status: string
+}
+
+export interface AgentTaskStatus {
+  task_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  prompt: string
+  created_at: number
+  started_at: number | null
+  completed_at: number | null
+  elapsed_seconds: number | null
+  result: {
+    report_markdown: string
+    report_html: string
+    statistics: {
+      change_areas: number
+      total_area_ha: number
+      confidence: number
+      categories?: Record<string, number>
+    }
+    tools_used: string[]
+  } | null
+  error: string | null
+}
+
 export interface EmbeddingPreview {
   patch_id: string
   version: string

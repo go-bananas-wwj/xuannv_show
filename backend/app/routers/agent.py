@@ -1,9 +1,15 @@
-"""Agent API — 智能体任务接口（预留）."""
+"""Agent API — 智能体任务接口.
+
+支持异步任务提交和轮询：
+- POST /agent/task     → 提交任务，返回 task_id
+- GET  /agent/task/{id} → 查询任务状态和结果
+"""
 from __future__ import annotations
 
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+from app.services.agent_engine import create_task, get_task
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -14,36 +20,52 @@ class AgentTaskRequest(BaseModel):
     time_range: list[str] | None = None
 
 
-class AgentTaskResponse(BaseModel):
-    report_html: str
-    result_image_url: str | None = None
-    statistics: dict
+class AgentTaskSubmitResponse(BaseModel):
+    task_id: str
+    status: str
 
 
-@router.post("/task")
-async def submit_task(request: AgentTaskRequest) -> JSONResponse:
-    """提交智能体任务（当前返回 mock 数据）."""
-    # TODO: 接入实际智能体服务
-    mock_report = f"""<h2>监测任务报告</h2>
-<p><strong>任务描述</strong>: {request.prompt}</p>
-<p><strong>区域</strong>: {request.region}</p>
-<h3>执行结果</h3>
-<ul>
-<li>检测到变化区域: 12 处</li>
-<li>主要变化类型: construction (8), demolition (3), land_conversion (1)</li>
-<li>总面积变化: 约 45.6 公顷</li>
-</ul>
-<p>变化主要集中在松北区北部的新建开发区，与 SAR 监测数据高度吻合。</p>"""
+class AgentTaskResult(BaseModel):
+    task_id: str
+    status: str
+    prompt: str
+    created_at: float
+    started_at: float | None = None
+    completed_at: float | None = None
+    elapsed_seconds: float | None = None
+    result: dict | None = None
+    error: str | None = None
 
-    return JSONResponse(
-        content={
-            "report_html": mock_report,
-            "result_image_url": None,
-            "statistics": {
-                "change_areas": 12,
-                "total_area_ha": 45.6,
-                "confidence": 0.92,
-                "categories": {"construction": 8, "demolition": 3, "land_conversion": 1},
-            },
-        }
-    )
+
+@router.post("/task", response_model=AgentTaskSubmitResponse)
+async def submit_task(request: AgentTaskRequest) -> dict:
+    """提交智能体任务，返回 task_id 用于轮询."""
+    task_id = await create_task(prompt=request.prompt, region=request.region)
+    return {"task_id": task_id, "status": "pending"}
+
+
+@router.get("/task/{task_id}", response_model=AgentTaskResult)
+async def query_task(task_id: str) -> dict:
+    """查询任务状态和结果."""
+    task = await get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    
+    elapsed = None
+    if task.started_at and task.completed_at:
+        elapsed = round(task.completed_at - task.started_at, 2)
+    elif task.started_at:
+        import time
+        elapsed = round(time.time() - task.started_at, 2)
+    
+    return {
+        "task_id": task.task_id,
+        "status": task.status,
+        "prompt": task.prompt,
+        "created_at": task.created_at,
+        "started_at": task.started_at,
+        "completed_at": task.completed_at,
+        "elapsed_seconds": elapsed,
+        "result": task.result,
+        "error": task.error,
+    }

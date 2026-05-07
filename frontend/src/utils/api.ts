@@ -65,6 +65,18 @@ export async function submitAgentTask(
   return data
 }
 
+export async function submitAgentTaskAsync(
+  request: AgentTaskRequest
+): Promise<{ task_id: string; status: string }> {
+  const { data } = await api.post<{ task_id: string; status: string }>('/agent/task', request)
+  return data
+}
+
+export async function getAgentTaskStatus(taskId: string): Promise<import('@/types').AgentTaskStatus> {
+  const { data } = await api.get<import('@/types').AgentTaskStatus>(`/agent/task/${taskId}`)
+  return data
+}
+
 // ── Annotate API ──
 
 // SAM preloading
