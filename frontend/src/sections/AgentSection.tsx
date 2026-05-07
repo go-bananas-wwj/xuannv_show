@@ -6,6 +6,7 @@ import StatisticsChart from '@/components/StatisticsChart'
 import ExportButtons from '@/components/ExportButtons'
 import GlassPanel from '@/components/GlassPanel'
 import { submitAgentTask } from '@/utils/api'
+import config from '@/config.json'
 import type { AgentTaskResponse } from '@/types'
 
 export default function AgentSection() {
@@ -23,7 +24,7 @@ export default function AgentSection() {
     try {
       const response = await submitAgentTask({
         prompt,
-        region: 'harbin',
+        region: config.region,
       })
       setResult(response)
     } catch (err) {

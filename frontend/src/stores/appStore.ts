@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import config from '@/config.json'
 import type { PatchMeta } from '@/types'
 
 interface AppState {
@@ -18,7 +19,7 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  region: 'harbin',
+  region: config.region,
   activeHead: null,
   selectedPatch: null,
   isLoading: false,

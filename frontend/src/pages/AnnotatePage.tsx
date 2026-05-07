@@ -1416,7 +1416,7 @@ export default function AnnotatePage() {
                               // 刷新标注列表确保同步
                               const anns = await fetchAnnotations()
                               store.setAnnotations(anns)
-                            } catch (err) {
+                            } catch (err: any) {
                               console.error('Failed to delete class:', err)
                               alert('删除失败：' + (err.message || '未知错误'))
                             }
