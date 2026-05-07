@@ -36,19 +36,27 @@
 | 技术 | 版本 | 说明 |
 |------|------|------|
 | Python | 3.11 | — |
-| FastAPI | 0.115.0 | 主框架 |
-| Uvicorn | 0.32.0 | ASGI 服务器 |
-| NumPy | 1.26.4 | — |
-| Pillow | 12.2.0 | 图像处理 |
-| rasterio | 1.4.2 | 栅格数据读写 |
-| pydantic | 2.9.2 | 数据校验 |
-| matplotlib | 3.9.0 | 矩阵缩略图渲染 |
-| PyTorch | 2.5.1+cu124 | ChangeDetectionHeadV3 / SAM3 推理（运行时依赖，未写入 requirements.txt） |
-| scikit-learn | — | Linear Probe 推理 + Embedding PCA（运行时依赖） |
-| joblib | — | 加载 `.pkl` 模型（运行时依赖） |
-| pyproj | — | 坐标转换（运行时依赖，environment.yml 已包含） |
+| FastAPI | >=0.115.0 | 主框架 |
+| Uvicorn | >=0.32.0 | ASGI 服务器 |
+| pydantic | >=2.9.0 | 数据校验 |
+| pydantic-settings | >=2.0.0 | `.env` 配置加载 |
+| NumPy | >=1.26.0,<2.0 | — |
+| Pillow | >=11.0.0 | 图像处理 |
+| rasterio | >=1.4.0 | 栅格数据读写 |
+| matplotlib | >=3.9.0 | 矩阵缩略图渲染 |
+| PyTorch | >=2.5.0 | ChangeDetectionHeadV3 / SAM3 推理（CUDA 版本通过 `--extra-index-url`） |
+| torchvision | >=0.20.0 | — |
+| scikit-learn | >=1.5.0 | Linear Probe 推理 + Embedding PCA |
+| joblib | >=1.3.0 | 加载 `.pkl` 模型 |
+| pyproj | >=3.5.0 | 坐标转换 |
+| requests | >=2.30.0 | HTTP 客户端 |
+| tqdm | >=4.67.0 | 进度条 |
+| einops | >=0.8.0 | SAM3 依赖 |
+| pycocotools | >=2.0.0 | SAM3 依赖 |
+| psutil | >=5.9.0 | SAM3 依赖 |
+| timm | >=1.0.17 | SAM3 依赖 |
 
-> **注意**：后端没有 `pyproject.toml` 或 `setup.py`，仅用 `requirements.txt` 管理基础 Web 依赖。PyTorch、scikit-learn、joblib、pyproj 等 ML/地理库在运行环境预装或通过 conda 安装，未全部写入 requirements.txt。
+> **注意**：`requirements.txt` 已包含所有运行时依赖（含 PyTorch/scikit-learn 等），`environment.yml` 通过 `-r backend/requirements.txt` 引用，避免重复维护。
 
 ### 部署与数据
 | 技术 | 说明 |
@@ -116,16 +124,26 @@ xuannv_show/
 │   │   │   ├── embeddings.py   # GET /api/embeddings/preview
 │   │   │   ├── heads.py        # GET /api/heads、/api/heads/{id}/result、mosaic、tile、detail、available-months
 │   │   │   └── agent.py        # POST /api/agent/task（mock）
+│   │   ├── config.py       # Pydantic Settings 统一配置（路径、CORS、字体、.env 覆盖）
 │   │   └── services/       # 业务逻辑与 ML 推理
 │   │       ├── data_loader.py      # 加载 patches_meta.json、embedding 路径、head 结果路径
 │   │       ├── matrix_renderer.py  # matplotlib 渲染 Time×Source 矩阵图（LRU 缓存 64）
 │   │       ├── task_engine.py      # ChangeDetectionEngine（PyTorch CD Head 推理、详情图、mosaic）
-│   │       └── segmentation_engine.py  # SegmentationEngine（sklearn Linear Probe 推理、4 分类任务）
+│   │       ├── segmentation_engine.py  # SegmentationEngine（sklearn Linear Probe 推理、4 分类任务）
+│   │       └── annotate/           # 交互式标注引擎（已拆分模块包）
+│   │           ├── __init__.py         # 导出工厂函数
+│   │           ├── class_manager.py    # 类别管理
+│   │           ├── annotation_store.py # 标注存储
+│   │           ├── sam3_client.py      # SAM3 推理客户端
+│   │           ├── training_engine.py  # LogisticRegression 训练
+│   │           └── inference_engine.py # 分类头推理
 │   ├── models/             # 序列化模型（*.pkl）与 metrics.json
 │   ├── scripts/
 │   │   └── precompute_downstream.py  # 批量预计算变化检测 tile & mosaic & detail
-│   ├── requirements.txt    # 基础 Web 依赖（无 PyTorch/sklearn）
-│   └── Dockerfile          # python:3.11-slim，仅复制 app/，不复制 models/ scripts/
+│   ├── requirements.txt    # 完整 Python 依赖（含 PyTorch + CUDA index）
+│   ├── Dockerfile          # 多阶段构建，含 GDAL/字体系统依赖
+│   └── scripts/
+│       └── precompute_downstream.py  # 批量预计算变化检测 tile & mosaic & detail
 ├── scripts/                # 数据准备脚本（运行在宿主机或开发环境）
 │   ├── generate_patch_meta.py        # 扫描栅格目录 → patches_meta.json
 │   ├── generate_embedding_tiles.py   # embedding PCA-RGB → embeddings/v2/*.png（注意：期望聚合格式 embedding_maps.npy + patch_ids.json）
@@ -141,9 +159,10 @@ xuannv_show/
 │   └── TEST_REPORT.md      # 2026-04-18，8/10 通过
 ├── docs/
 │   └── REGION_SETUP.md     # 新地区接入指南
+├── .env.example            # 环境变量模板（路径、CORS、API Key）
 ├── .github/workflows/
 │   └── deploy.yml          # CI/CD：构建 + 健康检查 + 部署 stub
-├── environment.yml         # Conda 环境（Node 20 + Python 3.11 + pip 依赖）
+├── environment.yml         # Conda 环境（Node 20 + Python 3.11，pip 引用 requirements.txt）
 ├── docker-compose.yml      # frontend:80 + backend:8000
 ├── Makefile                # dev / build / deploy / setup / clean
 └── README.md

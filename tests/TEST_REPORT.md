@@ -1,8 +1,20 @@
 # 玄女底座 — 验收测试报告
 
-> 测试日期: 2026-04-18
+> 测试日期: 2026-04-29
 > 测试工具: Playwright + Chromium Headless
-> 测试环境: Linux / Node 20 / Python 3.13
+> 测试环境: Linux / Node 20 / Python 3.11 / CUDA 12.4
+
+## 代码标准化 Phase 1-7 完成记录
+
+| Phase | 内容 | 状态 |
+|-------|------|------|
+| 1 | 统一配置系统（Pydantic Settings + .env） | ✅ |
+| 2 | 依赖管理标准化（requirements.txt / environment.yml） | ✅ |
+| 3 | Docker 配置标准化（compose / Dockerfile / .dockerignore） | ✅ |
+| 4 | 脚本工具链路径适配（相对路径 + 地区参数） | ✅ |
+| 5 | 前端配置集中化（config.json + TS 修复） | ✅ |
+| 6 | 代码结构拆分（annotate_engine.py → annotate/ 包） | ✅ |
+| 7 | 测试文档更新（AGENTS.md / README / TEST_REPORT） | ✅ |
 
 ## 验收标准检查结果
 

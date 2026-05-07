@@ -20,10 +20,14 @@ conda activate xuannv-show
 # 2. 安装前端依赖
 cd frontend && npm install
 
-# 3. 准备数据
+# 3. 配置环境变量（复制模板并修改路径）
+cp .env.example .env
+# 编辑 .env，根据实际数据位置调整路径
+
+# 4. 准备数据
 make setup
 
-# 4. 同时启动前后端
+# 5. 同时启动前后端
 cd .. && make dev
 ```
 
@@ -40,17 +44,28 @@ make deploy
 ```
 xuannv_show/
 ├── frontend/          # React + Vite + Tailwind
+│   └── src/config.json    # 地区配置（bounds、heads、sources）
 ├── backend/           # FastAPI
+│   ├── app/
+│   │   ├── config.py      # Pydantic Settings 统一配置
+│   │   ├── main.py        # FastAPI 入口
+│   │   ├── routers/       # API 路由
+│   │   └── services/      # 业务逻辑
+│   │       └── annotate/  # 标注引擎（已拆分模块包）
+│   ├── requirements.txt   # Python 依赖
+│   └── Dockerfile
 ├── scripts/           # 数据准备脚本
 │   ├── generate_patch_meta.py
 │   ├── generate_embedding_tiles.py
-│   └── setup_new_region.sh
+│   ├── setup_new_region.sh
+│   └── sync_static_data.sh
 ├── data/              # 静态数据
 │   └── harbin/
 │       ├── patches_meta.json
 │       └── embeddings/
 ├── docs/
 │   └── REGION_SETUP.md
+├── .env.example       # 环境变量模板
 ├── docker-compose.yml
 ├── Makefile
 └── README.md
