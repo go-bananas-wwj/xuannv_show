@@ -12,11 +12,7 @@ import {
   fetchAnnotations, saveAnnotation, deleteAnnotation,
   importGeoJSON, importSHP,
 } from '@/utils/api'
-import {
-  listSystemModels,
-  getSystemModelClasses,
-  inferSystemModel,
-} from '@/utils/api'
+
 import type { PatchMeta } from '@/types'
 import PatchMosaicSelector from '@/components/PatchMosaicSelector'
 
@@ -103,9 +99,6 @@ export default function AnnotatePage() {
   const [drawingPoints, setDrawingPoints] = useState<Array<{x: number, y: number}>>([])
   const [mousePos, setMousePos] = useState<{x: number, y: number} | null>(null)
   const [finishedGeometry, setFinishedGeometry] = useState<{type: 'polygon' | 'polyline', points: Array<{x: number, y: number}>} | null>(null)
-  const [systemModels, setSystemModels] = useState<Array<{ id: string; name: string; description: string; available: boolean }>>([])
-  const [isSystemPanelOpen, setIsSystemPanelOpen] = useState(true)
-  const [systemInferring, setSystemInferring] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const leftCanvasRef = useRef<HTMLCanvasElement>(null)
   const parentContainerRef = useRef<HTMLDivElement>(null)
@@ -159,38 +152,6 @@ export default function AnnotatePage() {
     }
   }
 
-  const handleLoadSystemClasses = async (modelId: string) => {
-    try {
-      const classes = await getSystemModelClasses(modelId)
-      const existingIds = new Set(store.classes.map((c) => c.id))
-      const newClasses = classes.filter((c) => !existingIds.has(c.id))
-      store.setClasses([...store.classes, ...newClasses])
-      if (newClasses.length > 0) {
-        store.setActiveClassId(newClasses[0].id)
-      }
-    } catch (err) {
-      console.error('Failed to load system classes:', err)
-    }
-  }
-
-  const handleInferSystemModel = async (modelId: string) => {
-    if (!store.selectedPatch || !store.selectedMonth) return
-    setSystemInferring(modelId)
-    try {
-      const { result_url } = await inferSystemModel(
-        modelId,
-        store.selectedPatch.patch_id,
-        store.selectedMonth
-      )
-      store.setInferenceImageUrl(result_url)
-      setShowInference(true)
-    } catch (err) {
-      console.error('System model inference failed:', err)
-    } finally {
-      setSystemInferring(null)
-    }
-  }
-
   // ── Tint a mask image with a color using destination-in composite ──
   const tintMask = useCallback((maskImg: HTMLImageElement, color: string): HTMLCanvasElement => {
     const c = document.createElement('canvas')
@@ -221,10 +182,6 @@ export default function AnnotatePage() {
     fetchPatches().then(setPatches).catch(console.error)
     fetchClasses().then(store.setClasses).catch(console.error)
     fetchAnnotations().then(store.setAnnotations).catch(console.error)
-  }, [])
-
-  useEffect(() => {
-    listSystemModels().then(setSystemModels).catch(console.error)
   }, [])
 
   // ── Auto-start tour for new users when entering annotate view ──
@@ -1527,58 +1484,6 @@ export default function AnnotatePage() {
               {samError && (
                 <div className="mt-2 text-xs text-red-600 bg-red-50 px-2 py-1.5 rounded">
                   {samError}
-                </div>
-              )}
-            </div>
-
-            {/* System Models */}
-            <div className="p-3 border-b border-slate-100">
-              <button
-                onClick={() => setIsSystemPanelOpen(!isSystemPanelOpen)}
-                className="flex items-center justify-between w-full mb-2"
-              >
-                <span className="text-xs font-medium text-slate-500">预置分类头</span>
-                <span className="text-xs text-slate-400">
-                  {isSystemPanelOpen ? '▼' : '▶'}
-                </span>
-              </button>
-              {isSystemPanelOpen && (
-                <div className="space-y-2">
-                  {systemModels.length === 0 && (
-                    <div className="text-xs text-slate-400">加载中...</div>
-                  )}
-                  {systemModels.map((model) => (
-                    <div
-                      key={model.id}
-                      className="flex items-center justify-between text-sm px-2 py-1.5 rounded-lg bg-slate-50"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-slate-700 truncate">{model.name}</div>
-                        <div className="text-xs text-slate-400 truncate">{model.description}</div>
-                      </div>
-                      <div className="flex items-center gap-1 ml-2">
-                        <button
-                          onClick={() => handleLoadSystemClasses(model.id)}
-                          title="加载类别"
-                          className="px-2 py-1 text-xs bg-white border border-slate-200 rounded hover:bg-sky-50 hover:border-sky-200 text-slate-600"
-                        >
-                          加载类别
-                        </button>
-                        <button
-                          onClick={() => handleInferSystemModel(model.id)}
-                          disabled={systemInferring === model.id || !store.selectedPatch}
-                          title="直接推理"
-                          className="px-2 py-1 text-xs bg-sky-500 text-white rounded hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {systemInferring === model.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            '推理'
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>

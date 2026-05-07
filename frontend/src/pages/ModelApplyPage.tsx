@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Play, Loader2, CheckSquare, Square, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { listModels, inferBatchWithModel } from '@/utils/api'
+import { listModels, inferBatchWithModel, listSystemModels, inferSystemModel } from '@/utils/api'
 import { fetchPatches } from '@/utils/api'
-import type { ModelInfo } from '@/utils/api'
+import type { ModelInfo, SystemModel } from '@/utils/api'
 import type { PatchMeta } from '@/types'
 
 const MONTHS = ['2025-04', '2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10']
@@ -14,6 +14,7 @@ export default function ModelApplyPage() {
   const initialModelId = searchParams.get('model_id') || ''
 
   const [models, setModels] = useState<ModelInfo[]>([])
+  const [systemModels, setSystemModels] = useState<SystemModel[]>([])
   const [selectedModelId, setSelectedModelId] = useState(initialModelId)
   const [selectedMonth, setSelectedMonth] = useState('2025-04')
   const [patches, setPatches] = useState<PatchMeta[]>([])
@@ -24,14 +25,19 @@ export default function ModelApplyPage() {
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([listModels(), fetchPatches()])
-      .then(([m, p]) => {
+    Promise.all([listModels(), fetchPatches(), listSystemModels()])
+      .then(([m, p, sys]) => {
         setModels(m.filter((x) => x.status === 'completed'))
+        setSystemModels(sys)
         setPatches(p)
         // Auto-select first model if none selected
-        if (!selectedModelId && m.length > 0) {
-          const first = m.find((x) => x.status === 'completed')
-          if (first) setSelectedModelId(first.id)
+        if (!selectedModelId) {
+          const firstUser = m.find((x) => x.status === 'completed')
+          if (firstUser) {
+            setSelectedModelId(firstUser.id)
+          } else if (sys.length > 0) {
+            setSelectedModelId(`sys_${sys[0].id}`)
+          }
         }
       })
       .catch(console.error)
@@ -55,17 +61,42 @@ export default function ModelApplyPage() {
     setSelectedPatchIds(new Set())
   }
 
+  const isSystemModel = selectedModelId.startsWith('sys_')
+  const selectedSystemModel = isSystemModel
+    ? systemModels.find((m) => `sys_${m.id}` === selectedModelId)
+    : null
+
   const handleInfer = async () => {
     if (!selectedModelId || selectedPatchIds.size === 0) return
     setIsInferring(true)
     setResults([])
     try {
-      const res = await inferBatchWithModel(
-        selectedModelId,
-        Array.from(selectedPatchIds),
-        selectedMonth
-      )
-      setResults(res)
+      if (isSystemModel && selectedSystemModel) {
+        // Serial inference for system models
+        const patchIds = Array.from(selectedPatchIds)
+        const batchResults: Array<{ patch_id: string; image_url: string }> = []
+        for (const patchId of patchIds) {
+          try {
+            const { result_url } = await inferSystemModel(
+              selectedSystemModel.id,
+              patchId,
+              selectedMonth
+            )
+            batchResults.push({ patch_id: patchId, image_url: result_url })
+          } catch (e) {
+            console.error(`System model inference failed for ${patchId}:`, e)
+            batchResults.push({ patch_id: patchId, image_url: '' })
+          }
+        }
+        setResults(batchResults)
+      } else {
+        const res = await inferBatchWithModel(
+          selectedModelId,
+          Array.from(selectedPatchIds),
+          selectedMonth
+        )
+        setResults(res)
+      }
     } catch (err) {
       console.error('Batch inference failed:', err)
     } finally {
@@ -104,10 +135,23 @@ export default function ModelApplyPage() {
                     onChange={(e) => setSelectedModelId(e.target.value)}
                     className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white min-w-[200px]"
                   >
-                    {models.length === 0 && <option value="">暂无可用分类头</option>}
-                    {models.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
+                    {models.length === 0 && systemModels.length === 0 && (
+                      <option value="">暂无可用分类头</option>
+                    )}
+                    {models.length > 0 && (
+                      <optgroup label="自定义分类头">
+                        {models.map((m) => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {systemModels.length > 0 && (
+                      <optgroup label="系统预置模型">
+                        {systemModels.map((m) => (
+                          <option key={`sys_${m.id}`} value={`sys_${m.id}`}>{m.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
 

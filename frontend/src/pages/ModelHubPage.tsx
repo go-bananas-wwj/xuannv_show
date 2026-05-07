@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Play, Trash2, Edit2, Check, X, Loader2, Box, AlertCircle } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { listModels, renameModel, deleteModel } from '@/utils/api'
-import type { ModelInfo } from '@/utils/api'
+import { listModels, renameModel, deleteModel, listSystemModels } from '@/utils/api'
+import type { ModelInfo, SystemModel } from '@/utils/api'
 
 export default function ModelHubPage() {
   const [models, setModels] = useState<ModelInfo[]>([])
@@ -11,6 +11,7 @@ export default function ModelHubPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [polling, setPolling] = useState(false)
+  const [systemModels, setSystemModels] = useState<SystemModel[]>([])
 
   const loadModels = async () => {
     try {
@@ -28,6 +29,7 @@ export default function ModelHubPage() {
 
   useEffect(() => {
     loadModels()
+    listSystemModels().then(setSystemModels).catch(console.error)
   }, [])
 
   // Poll training status
@@ -103,11 +105,43 @@ export default function ModelHubPage() {
 
       {/* Main content */}
       <main className="max-w-6xl mx-auto p-6">
+        {/* System Models */}
+        {systemModels.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">系统预置模型</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {systemModels.map((model) => (
+                <div
+                  key={model.id}
+                  className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-slate-800 truncate">{model.name}</h3>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">系统预置</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1 truncate">{model.description}</p>
+                    </div>
+                  </div>
+                  <Link
+                    to={`/apply?model_id=sys_${model.id}&type=system`}
+                    className="flex items-center justify-center gap-1 px-3 py-1.5 bg-sky-500 text-white text-xs rounded-lg hover:bg-sky-600"
+                  >
+                    <Play className="w-3 h-3" />
+                    去应用
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
           </div>
-        ) : models.length === 0 ? (
+        ) : models.length === 0 && systemModels.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
             <Box className="w-12 h-12 mb-4 opacity-50" />
             <p className="text-lg font-medium mb-2">暂无分类头</p>
@@ -117,6 +151,14 @@ export default function ModelHubPage() {
               className="mt-6 px-4 py-2 bg-sky-500 text-white text-sm rounded-lg hover:bg-sky-600"
             >
               去标注
+            </Link>
+          </div>
+        ) : models.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            <Box className="w-10 h-10 mx-auto mb-3 opacity-40" />
+            <p className="text-sm">暂无自定义分类头</p>
+            <Link to="/annotate" className="mt-2 inline-block text-sm text-sky-500 hover:text-sky-600">
+              去标注训练 →
             </Link>
           </div>
         ) : (
