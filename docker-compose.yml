@@ -3,14 +3,31 @@ version: "3.8"
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: xuannv-backend
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data:ro
+      # 外部 AlphaEarth 核心代码（只读）
+      - ${XUANNV_ROOT:-/workspace/xuannv}:/workspace/xuannv:ro
+      # 遥感数据目录（只读）
+      - ${DATA_ROOT:-/workspace/raw}:/workspace/raw:ro
+      # 模型输出目录（读写，用于保存推理结果）
+      - ${OUTPUTS_ROOT:-/workspace/outputs}:/workspace/outputs
+      # 用户标注数据持久化
+      - ./data/user_annotations:/app/data/user_annotations
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
+    networks:
+      - xuannv-net
 
   frontend:
     build:
@@ -22,3 +39,9 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - xuannv-net
+
+networks:
+  xuannv-net:
+    driver: bridge
