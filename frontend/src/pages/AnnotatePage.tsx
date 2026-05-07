@@ -1130,7 +1130,9 @@ export default function AnnotatePage() {
                 <>
                   {/* Hint overlay */}
                   <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 text-xs text-slate-400 bg-white/90 backdrop-blur px-3 py-1.5 rounded-full shadow-sm pointer-events-none select-none">
-                    {drawMode === 'sam' && samEnabled && store.isEmbeddingReady
+                    {store.annotationMode === 'change_detection'
+                      ? '右侧为变化后影像，请在右侧进行标注 · Ctrl+滚轮=缩放 · 中键/空格+拖拽=平移'
+                      : drawMode === 'sam' && samEnabled && store.isEmbeddingReady
                       ? '左键=正点 · 右键/Shift+左键=负点 · Ctrl+滚轮=缩放 · 中键/空格+拖拽=平移 · 1/2/3=切换mask · A=接受 · R=取消'
                       : drawMode === 'polygon'
                       ? '左键=添加顶点 · 双击/Enter=闭合多边形 · Esc=取消 · Ctrl+滚轮=缩放 · 中键/空格+拖拽=平移 · A=保存'
@@ -1139,38 +1141,92 @@ export default function AnnotatePage() {
                       : 'Ctrl+滚轮=缩放 · 中键/空格+拖拽=平移 · 请选择标注模式'}
                   </div>
 
-                  {/* Canvas container */}
-                  <div
-                    id="tour-step-canvas"
-                    ref={canvasContainerRef}
-                    className={cn(
-                      'absolute inset-0',
-                      isSpacePressed ? 'cursor-grab' : mode === 'create' ? 'cursor-crosshair' : 'cursor-default'
-                    )}
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    onDoubleClick={finishDrawing}
-                    onContextMenu={(e) => e.preventDefault()}
-                  >
-                    <canvas
-                      ref={canvasRef}
-                      className="w-full h-full block"
-                    />
-
-                    {/* Loading overlay */}
-                    {(isImageLoading || store.isLoadingMask) && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-20 pointer-events-none">
-                        <div className="flex flex-col items-center gap-2">
-                          <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
-                          <span className="text-sm text-slate-500">
-                            {isImageLoading ? '影像加载中...' : 'SAM 分割中...'}
-                          </span>
+                  {store.annotationMode === 'change_detection' && store.selectedPatch ? (
+                    /* 变化检测模式：左右并排双期视图 */
+                    <div className="absolute inset-0 flex">
+                      {/* Left: Before image (read-only) */}
+                      <div className="w-1/2 relative border-r-2 border-slate-300 bg-slate-900">
+                        <img
+                          src={`/api/patches/${store.selectedPatch.patch_id}/image?month=${store.selectedBeforeMonth}&source=${dataSource}`}
+                          className="w-full h-full object-contain"
+                          alt={`Before ${store.selectedBeforeMonth}`}
+                          draggable={false}
+                        />
+                        <div className="absolute top-3 left-3 bg-black/60 text-white text-xs px-2.5 py-1 rounded-md font-medium pointer-events-none">
+                          变化前 · {store.selectedBeforeMonth}
                         </div>
                       </div>
-                    )}
-                  </div>
+                      {/* Right: After canvas (interactive) */}
+                      <div className="w-1/2 relative">
+                        <div
+                          id="tour-step-canvas"
+                          ref={canvasContainerRef}
+                          className={cn(
+                            'absolute inset-0',
+                            isSpacePressed ? 'cursor-grab' : mode === 'create' ? 'cursor-crosshair' : 'cursor-default'
+                          )}
+                          onMouseDown={handleMouseDown}
+                          onMouseMove={handleMouseMove}
+                          onMouseUp={handleMouseUp}
+                          onMouseLeave={handleMouseUp}
+                          onDoubleClick={finishDrawing}
+                          onContextMenu={(e) => e.preventDefault()}
+                        >
+                          <canvas
+                            ref={canvasRef}
+                            className="w-full h-full block"
+                          />
+                          {/* Loading overlay */}
+                          {(isImageLoading || store.isLoadingMask) && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-20 pointer-events-none">
+                              <div className="flex flex-col items-center gap-2">
+                                <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
+                                <span className="text-sm text-slate-500">
+                                  {isImageLoading ? '影像加载中...' : 'SAM 分割中...'}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="absolute top-3 left-3 bg-sky-600/80 text-white text-xs px-2.5 py-1 rounded-md font-medium pointer-events-none">
+                          变化后 · {store.selectedAfterMonth}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* 单期分割模式：单一画布 */
+                    <div
+                      id="tour-step-canvas"
+                      ref={canvasContainerRef}
+                      className={cn(
+                        'absolute inset-0',
+                        isSpacePressed ? 'cursor-grab' : mode === 'create' ? 'cursor-crosshair' : 'cursor-default'
+                      )}
+                      onMouseDown={handleMouseDown}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
+                      onDoubleClick={finishDrawing}
+                      onContextMenu={(e) => e.preventDefault()}
+                    >
+                      <canvas
+                        ref={canvasRef}
+                        className="w-full h-full block"
+                      />
+
+                      {/* Loading overlay */}
+                      {(isImageLoading || store.isLoadingMask) && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-20 pointer-events-none">
+                          <div className="flex flex-col items-center gap-2">
+                            <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
+                            <span className="text-sm text-slate-500">
+                              {isImageLoading ? '影像加载中...' : 'SAM 分割中...'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
