@@ -16,20 +16,34 @@ const MONTH_LABELS: Record<string, string> = {
   '2025-10': '2025年10月',
 }
 
+const IMG_W = 6656
+const IMG_H = 6144
+
 export default function GlobalEmbeddingModal({ isOpen, onClose }: GlobalEmbeddingModalProps) {
   const [monthIndex, setMonthIndex] = useState(0)
-  const [scale, setScale] = useState(1)
+  const [scale, setScale] = useState(0.15)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [showInfo, setShowInfo] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const currentMonth = MONTHS[monthIndex]
   const imageUrl = `/data/embeddings/global/${currentMonth}.png`
 
-  const MIN_SCALE = 0.15
+  const MIN_SCALE = 0.08
   const MAX_SCALE = 4.0
+
+  // Fit-to-view on open
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const scaleX = rect.width / IMG_W
+      const scaleY = rect.height / IMG_H
+      const fitScale = Math.min(scaleX, scaleY) * 0.95
+      setScale(Math.max(MIN_SCALE, fitScale))
+      setOffset({ x: 0, y: 0 })
+    }
+  }, [isOpen])
 
   // Close on Escape
   useEffect(() => {
@@ -74,7 +88,15 @@ export default function GlobalEmbeddingModal({ isOpen, onClose }: GlobalEmbeddin
   const handleZoomIn = () => setScale((s) => Math.min(MAX_SCALE, s * 1.3))
   const handleZoomOut = () => setScale((s) => Math.max(MIN_SCALE, s / 1.3))
   const handleReset = () => {
-    setScale(1)
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const scaleX = rect.width / IMG_W
+      const scaleY = rect.height / IMG_H
+      const fitScale = Math.min(scaleX, scaleY) * 0.95
+      setScale(Math.max(MIN_SCALE, fitScale))
+    } else {
+      setScale(0.15)
+    }
     setOffset({ x: 0, y: 0 })
   }
 
@@ -94,7 +116,7 @@ export default function GlobalEmbeddingModal({ isOpen, onClose }: GlobalEmbeddin
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.92, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="w-[95vw] h-[90vh] rounded-2xl border border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-2xl overflow-hidden flex flex-col"
+            className="w-[95vw] h-[92vh] rounded-2xl border border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-2xl overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -104,153 +126,156 @@ export default function GlobalEmbeddingModal({ isOpen, onClose }: GlobalEmbeddin
                 <h2 className="text-lg font-bold text-slate-800">全域数据嵌入可视化</h2>
                 <span className="text-xs text-slate-400 font-mono">{MONTH_LABELS[currentMonth]}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowInfo((v) => !v)}
-                  className={`p-2 rounded-lg transition-colors ${showInfo ? 'bg-sky-50 text-sky-600' : 'hover:bg-slate-100 text-slate-400'}`}
-                  title="切换介绍文字"
-                >
-                  <Info className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-            </div>
-
-            {/* Image viewport */}
-            <div
-              ref={containerRef}
-              className="flex-1 relative overflow-hidden bg-slate-900 cursor-grab active:cursor-grabbing"
-              onWheel={handleWheel}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            >
-              <div
-                className="absolute inset-0 flex items-center justify-center"
-                style={{
-                  transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-                  transformOrigin: 'center center',
-                  transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                }}
+              <button
+                onClick={onClose}
+                className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
               >
-                <img
-                  src={imageUrl}
-                  alt={`全域嵌入 ${currentMonth}`}
-                  className="max-w-none"
-                  style={{ imageRendering: 'pixelated' }}
-                  draggable={false}
-                />
-              </div>
-
-              {/* Zoom controls */}
-              <div className="absolute bottom-4 right-4 flex flex-col gap-1.5">
-                <button
-                  onClick={handleZoomIn}
-                  className="w-9 h-9 rounded-lg bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition-colors"
-                >
-                  <ZoomIn className="w-4 h-4 text-slate-600" />
-                </button>
-                <button
-                  onClick={handleZoomOut}
-                  className="w-9 h-9 rounded-lg bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition-colors"
-                >
-                  <ZoomOut className="w-4 h-4 text-slate-600" />
-                </button>
-                <button
-                  onClick={handleReset}
-                  className="w-9 h-9 rounded-lg bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition-colors text-xs font-medium text-slate-600"
-                >
-                  1:1
-                </button>
-              </div>
-
-              {/* Scale indicator */}
-              <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-black/50 text-white text-xs font-mono">
-                {Math.round(scale * 100)}%
-              </div>
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
             </div>
 
-            {/* Month slider */}
-            <div className="px-6 py-3 border-t border-slate-200/60 shrink-0 bg-white">
-              <div className="flex items-center gap-4">
-                <span className="text-xs text-slate-400 font-medium w-20 text-right">
-                  {MONTH_LABELS[MONTHS[0]]}
-                </span>
-                <input
-                  type="range"
-                  min={0}
-                  max={MONTHS.length - 1}
-                  step={1}
-                  value={monthIndex}
-                  onChange={(e) => {
-                    setMonthIndex(Number(e.target.value))
-                    handleReset()
+            {/* Main: left image + right sidebar */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* Left: Image viewport */}
+              <div
+                ref={containerRef}
+                className="flex-1 relative overflow-hidden bg-slate-900 cursor-grab active:cursor-grabbing"
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                <div
+                  className="absolute inset-0 flex items-center justify-center"
+                  style={{
+                    transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                    transformOrigin: 'center center',
+                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
                   }}
-                  className="flex-1 h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-sky-500"
-                />
-                <span className="text-xs text-slate-400 font-medium w-20">
-                  {MONTH_LABELS[MONTHS[MONTHS.length - 1]]}
-                </span>
-              </div>
-              <div className="flex justify-between px-1 mt-1.5">
-                {MONTHS.map((m, i) => (
-                  <button
-                    key={m}
-                    onClick={() => {
-                      setMonthIndex(i)
-                      handleReset()
-                    }}
-                    className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                      i === monthIndex
-                        ? 'bg-sky-50 text-sky-600 font-medium'
-                        : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                  >
-                    {MONTH_LABELS[m]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Info panel */}
-            <AnimatePresence>
-              {showInfo && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.25 }}
-                  className="overflow-hidden border-t border-slate-200/60 shrink-0"
                 >
-                  <div className="px-6 py-4 bg-slate-50/80">
-                    <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                      <Info className="w-4 h-4 text-sky-500" />
-                      什么是地球嵌入？
-                    </h3>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      地球嵌入（Earth Embedding）是将卫星影像的每个像素映射到一个高维特征向量的技术，
-                      使计算机能够"理解"地表信息。本系统使用 <strong className="text-slate-600">128 维嵌入向量</strong>，
-                      由 AlphaEarth Foundations（AEF）预训练模型提取。每个向量编码了该像素位置的地表覆盖类型、
-                      纹理特征和语义信息，包括植被、建筑、水体、裸地等地物类别。
+                  <img
+                    src={imageUrl}
+                    alt={`全域嵌入 ${currentMonth}`}
+                    className="max-w-none"
+                    style={{ imageRendering: 'pixelated' }}
+                    draggable={false}
+                  />
+                </div>
+
+                {/* Zoom controls */}
+                <div className="absolute bottom-4 right-4 flex flex-col gap-1.5">
+                  <button
+                    onClick={handleZoomIn}
+                    className="w-9 h-9 rounded-lg bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition-colors"
+                  >
+                    <ZoomIn className="w-4 h-4 text-slate-600" />
+                  </button>
+                  <button
+                    onClick={handleZoomOut}
+                    className="w-9 h-9 rounded-lg bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition-colors"
+                  >
+                    <ZoomOut className="w-4 h-4 text-slate-600" />
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    className="w-9 h-9 rounded-lg bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition-colors text-xs font-medium text-slate-600"
+                  >
+                    适应
+                  </button>
+                </div>
+
+                {/* Scale indicator */}
+                <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-black/50 text-white text-xs font-mono">
+                  {Math.round(scale * 100)}%
+                </div>
+              </div>
+
+              {/* Right: Sidebar */}
+              <div className="w-80 shrink-0 border-l border-slate-200/60 bg-white flex flex-col overflow-y-auto">
+                {/* Month selector */}
+                <div className="p-5 border-b border-slate-100">
+                  <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <CalendarIcon className="w-4 h-4 text-sky-500" />
+                    月份选择
+                  </h3>
+                  <input
+                    type="range"
+                    min={0}
+                    max={MONTHS.length - 1}
+                    step={1}
+                    value={monthIndex}
+                    onChange={(e) => setMonthIndex(Number(e.target.value))}
+                    className="w-full h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-sky-500 mb-3"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    {MONTHS.map((m, i) => (
+                      <button
+                        key={m}
+                        onClick={() => setMonthIndex(i)}
+                        className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
+                          i === monthIndex
+                            ? 'bg-sky-500 text-white font-medium'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        }`}
+                      >
+                        {MONTH_LABELS[m]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Info panel */}
+                <div className="p-5 flex-1">
+                  <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <Info className="w-4 h-4 text-sky-500" />
+                    什么是地球嵌入？
+                  </h3>
+                  <div className="text-xs text-slate-500 leading-relaxed space-y-3">
+                    <p>
+                      地球嵌入（Earth Embedding）是遥感与 AI 交叉领域最近迅速兴起的概念。
+                      它借鉴了大语言模型中"词嵌入"的思想——将复杂的卫星影像数据压缩成紧凑的
+                      <strong className="text-slate-700">高维向量</strong>，
+                      让计算机能够"读懂"地球表面的每一寸土地。
                     </p>
-                    <p className="text-xs text-slate-500 leading-relaxed mt-1.5">
-                      上图通过 <strong className="text-slate-600">主成分分析（PCA）</strong> 将 128 维特征投影到 RGB 三通道进行可视化。
-                      不同颜色区域对应不同的地表特征簇——这种可视化方法与 AEF 论文及 CARTO、AEF Mosaic 等主流实践保持一致。
+                    <p>
+                      传统的遥感分析需要人工设计特征、标注大量样本。而地球嵌入通过自监督学习
+                      从海量卫星影像中提取通用表征：植被、建筑、水体、道路、农田……所有地物
+                      类型都被编码为向量空间中的坐标。相似的地表环境产生相似的嵌入向量，
+                      不同的环境则分布在向量空间的不同区域。
+                    </p>
+                    <div className="bg-slate-50 rounded-lg p-3 space-y-1.5">
+                      <p className="text-xs font-medium text-slate-600">这种"地表语义向量"具有惊人的通用性：</p>
+                      <ul className="text-xs text-slate-500 space-y-1 list-disc list-inside">
+                        <li>无需重新训练即可适配变化检测、地物分类、相似性检索等下游任务</li>
+                        <li>跨时间、跨区域保持一致性，支持长时序监测与全球尺度分析</li>
+                        <li>向量运算揭示地理规律——嵌入差分可量化城市化进程、植被退化、灾害影响</li>
+                      </ul>
+                    </div>
+                    <p>
+                      上图通过 <strong className="text-slate-700">PCA</strong> 将高维嵌入投影到 RGB 颜色空间进行可视化。
+                      不同颜色代表不同的地表特征簇，让你一眼"看见"机器眼中的地球。
                       鼠标滚轮缩放，拖拽平移查看细节。
                     </p>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+              </div>
+            </div>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+// Small inline icon for calendar
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
   )
 }

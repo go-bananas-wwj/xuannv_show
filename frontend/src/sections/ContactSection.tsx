@@ -149,6 +149,7 @@ export default function ContactSection() {
                 src="/videos/EarthEmbeddingExplorer-demo.mp4"
                 controls
                 autoPlay
+                onLoadedMetadata={(e) => { e.currentTarget.playbackRate = 1.5 }}
                 className="rounded-xl shadow-2xl max-w-full max-h-[85vh]"
                 style={{ width: 'auto', height: 'auto' }}
               />

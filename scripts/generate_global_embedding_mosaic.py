@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 
@@ -77,7 +77,7 @@ def fit_global_pca(all_embs: dict[str, np.ndarray], max_samples: int = 500_000) 
 def patch_to_rgb(
     emb: np.ndarray, pca: PCA, vmin: np.ndarray, vmax: np.ndarray, tile_size: int
 ) -> Image.Image:
-    """Convert a single patch embedding to PCA-RGB PIL Image."""
+    """Convert a single patch embedding to PCA-RGB PIL Image with feathered edges."""
     D, H, W = emb.shape
     flat = emb.reshape(D, -1).T
     rgb = pca.transform(flat).reshape(H, W, 3)
@@ -87,6 +87,13 @@ def patch_to_rgb(
     img = Image.fromarray(rgb_uint8)
     if tile_size != H:
         img = img.resize((tile_size, tile_size), Image.Resampling.LANCZOS)
+
+    # Feather edges: apply slight blur only to boundary pixels to smooth tile seams
+    blurred = img.filter(ImageFilter.GaussianBlur(radius=0.6))
+    edge_mask = Image.new("L", img.size, 0)
+    draw = ImageDraw.Draw(edge_mask)
+    draw.rectangle([0, 0, img.width - 1, img.height - 1], outline=255, width=2)
+    img = Image.composite(blurred, img, edge_mask)
     return img
 
 
