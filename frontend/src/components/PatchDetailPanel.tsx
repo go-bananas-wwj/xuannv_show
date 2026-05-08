@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, MapPin, Calendar, Database, AlertCircle } from 'lucide-react'
+import { X, MapPin, Calendar, Database, AlertCircle, Layers } from 'lucide-react'
 
 interface PatchDetail {
   patch_id: string
@@ -39,6 +39,9 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
   const [matrixError, setMatrixError] = useState(false)
   const [imgLoaded, setImgLoaded] = useState(false)
   const [isEnlarged, setIsEnlarged] = useState(false)
+  const [showEmbedding, setShowEmbedding] = useState(false)
+  const [embedUrl, setEmbedUrl] = useState<string | null>(null)
+  const [embedLoaded, setEmbedLoaded] = useState(false)
   const matrixUrlRef = useRef<string | null>(null)
 
   // Fetch Time×Source Matrix when patch changes
@@ -85,6 +88,18 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
         matrixUrlRef.current = null
       }
     }
+  }, [patch?.patch_id])
+
+  // Load embedding preview when patch changes
+  useEffect(() => {
+    if (!patch) {
+      setEmbedUrl(null)
+      setEmbedLoaded(false)
+      setShowEmbedding(false)
+      return
+    }
+    setEmbedUrl(`/api/embeddings/preview?patch_id=${patch.patch_id}&region=harbin&version=v2`)
+    setEmbedLoaded(false)
   }, [patch?.patch_id])
 
   // Close on Escape key
@@ -174,6 +189,52 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Embedding preview */}
+              <div className="mb-6">
+                <button
+                  onClick={() => setShowEmbedding((v) => !v)}
+                  className="flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wider mb-3 hover:text-sky-500 transition-colors"
+                >
+                  <Layers className="w-4 h-4" />
+                  {showEmbedding ? '隐藏嵌入数据集' : '展示嵌入数据集'}
+                </button>
+                <AnimatePresence>
+                  {showEmbedding && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
+                        <div className="relative w-fit mx-auto">
+                          {!embedLoaded && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+                              <div className="w-8 h-8 border-2 border-sky-300 border-t-sky-500 rounded-full animate-spin" />
+                            </div>
+                          )}
+                          {embedUrl && (
+                            <img
+                              src={embedUrl}
+                              alt="Embedding PCA-RGB"
+                              className="block rounded-lg"
+                              style={{ maxHeight: '300px', width: 'auto', imageRendering: 'pixelated' }}
+                              onLoad={() => setEmbedLoaded(true)}
+                              onError={() => setEmbedLoaded(false)}
+                            />
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-3 text-center leading-relaxed">
+                          通过 PCA 将 128 维嵌入投影到 RGB 颜色空间，
+                          不同颜色反映该像素位置的地表特征语义。
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Info grid */}

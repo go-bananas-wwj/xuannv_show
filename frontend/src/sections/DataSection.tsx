@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { LayoutGrid, MapPin, Eye, Database } from 'lucide-react'
+import { LayoutGrid, MapPin, Eye, Database, Globe } from 'lucide-react'
 import {
   MapContainer,
   TileLayer,
@@ -23,6 +23,7 @@ interface PatchOverlay {
 import PatchDetailPanel from '@/components/PatchDetailPanel'
 import GlassPanel from '@/components/GlassPanel'
 import { usePatches } from '@/App'
+import GlobalEmbeddingModal from '@/components/GlobalEmbeddingModal'
 
 function MapClickHandler({
   onMapClick,
@@ -75,11 +76,13 @@ function VisiblePatchesRenderer({
   previewPatch,
   patchBounds,
   handlePatchClick,
+  setDetailPatch,
 }: {
   patches: PatchOverlay[]
   previewPatch: PatchOverlay | null
   patchBounds: (p: PatchOverlay) => LatLngBoundsLiteral
   handlePatchClick: (patch: PatchOverlay) => void
+  setDetailPatch: (patch: PatchOverlay | null) => void
 }) {
   const visibleIds = useVisiblePatches(patches)
   return (
@@ -113,7 +116,10 @@ function VisiblePatchesRenderer({
                   {Object.keys(patch.sources).length} 种传感器
                 </p>
                 <button
-                  onClick={() => handlePatchClick(patch)}
+                  onClick={() => {
+                    handlePatchClick(patch)
+                    setDetailPatch(patch)
+                  }}
                   className="mt-2 flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700"
                 >
                   <Eye className="w-3 h-3" />
@@ -132,6 +138,7 @@ export default function DataSection() {
   const patches = usePatches()
   const [previewPatch, setPreviewPatch] = useState<PatchOverlay | null>(null)
   const [detailPatch, setDetailPatch] = useState<PatchOverlay | null>(null)
+  const [showGlobalModal, setShowGlobalModal] = useState(false)
   const loading = patches.length === 0
 
   const allBounds: LatLngBoundsLiteral = useMemo(() => {
@@ -218,6 +225,13 @@ export default function DataSection() {
                   <span className="text-slate-700 text-xs">2023-01 ~ 2025-10</span>
                 </div>
               </div>
+              <button
+                onClick={() => setShowGlobalModal(true)}
+                className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors text-sm font-medium"
+              >
+                <Globe className="w-4 h-4" />
+                查看全域数据嵌入
+              </button>
             </GlassPanel>
 
             {/* Selected patch preview */}
@@ -289,6 +303,7 @@ export default function DataSection() {
                     previewPatch={previewPatch}
                     patchBounds={patchBounds}
                     handlePatchClick={handlePatchClick}
+                    setDetailPatch={setDetailPatch}
                   />
                 </MapContainer>
               </div>
@@ -300,6 +315,10 @@ export default function DataSection() {
       <PatchDetailPanel
         patch={detailPatch as any}
         onClose={() => setDetailPatch(null)}
+      />
+      <GlobalEmbeddingModal
+        isOpen={showGlobalModal}
+        onClose={() => setShowGlobalModal(false)}
       />
     </section>
   )
