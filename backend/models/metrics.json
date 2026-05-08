@@ -8,27 +8,27 @@
     "f1_average": "macro"
   },
   {
-    "task": "dynamic_world",
-    "n_samples": 636000,
-    "n_classes": 9,
-    "balanced_accuracy": 0.47004971162515585,
-    "f1_score": 0.1240295677531708,
-    "f1_average": "macro"
-  },
-  {
-    "task": "jrc_water",
-    "n_samples": 636000,
-    "n_classes": 2,
-    "balanced_accuracy": 0.8059102001947505,
-    "f1_score": 0.7057935567699775,
-    "f1_average": "binary"
-  },
-  {
     "task": "building_extraction",
     "n_samples": 118824,
     "n_classes": 2,
     "balanced_accuracy": 0.5704467584932759,
     "f1_score": 0.2953361825357902,
     "f1_average": "binary"
+  },
+  {
+    "task": "jrc_water",
+    "n_samples": 107160,
+    "n_classes": 2,
+    "balanced_accuracy": 0.7112211708394698,
+    "f1_score": 0.7900671306952871,
+    "f1_average": "binary"
+  },
+  {
+    "task": "dynamic_world",
+    "n_samples": 360000,
+    "n_classes": 9,
+    "balanced_accuracy": 0.4139333333333333,
+    "f1_score": 0.40620731802041365,
+    "f1_average": "macro"
   }
 ]
