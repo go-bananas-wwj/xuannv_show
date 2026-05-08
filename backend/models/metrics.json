@@ -25,10 +25,10 @@
   },
   {
     "task": "building_extraction",
-    "n_samples": 636000,
+    "n_samples": 118824,
     "n_classes": 2,
-    "balanced_accuracy": 0.882291705288876,
-    "f1_score": 0.7471694667640614,
+    "balanced_accuracy": 0.5704467584932759,
+    "f1_score": 0.2953361825357902,
     "f1_average": "binary"
   }
 ]
