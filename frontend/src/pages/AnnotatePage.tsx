@@ -326,7 +326,9 @@ export default function AnnotatePage() {
   }, [store.annotations, store.classes, tintMask])
 
   // ── Shared canvas render function ──
-  const renderCanvas = useCallback((canvas: HTMLCanvasElement | null, img: HTMLImageElement | null) => {
+  const selectedPatchId = store.selectedPatch?.patch_id
+
+  const renderCanvas = useCallback((canvas: HTMLCanvasElement | null, img: HTMLImageElement | null, monthFilter?: string) => {
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -487,6 +489,14 @@ export default function AnnotatePage() {
 
     // Saved annotations overlay
     for (const ann of store.annotations) {
+      if (ann.patch_id !== selectedPatchId) continue
+      if (monthFilter) {
+        if (ann.before_month && ann.after_month) {
+          if (ann.before_month !== monthFilter && ann.after_month !== monthFilter) continue
+        } else {
+          if (ann.month !== monthFilter) continue
+        }
+      }
       const cls = store.classes.find(c => c.id === ann.class_id)
       const color = cls?.color || '#999'
       const isSelected = ann.id === selectedAnnotationId
@@ -543,15 +553,15 @@ export default function AnnotatePage() {
     }
 
     ctx.restore()
-  }, [offset, scale, points, tintedMaskObjs, store.selectedMaskIndex, store.annotations, store.classes, selectedAnnotationId, savedMaskImages, finishedGeometry, drawingPoints, mousePos, drawMode, hexToRgba])
+  }, [offset, scale, points, tintedMaskObjs, store.selectedMaskIndex, store.annotations, store.classes, selectedPatchId, selectedAnnotationId, savedMaskImages, finishedGeometry, drawingPoints, mousePos, drawMode, hexToRgba])
 
   // ── Canvas render loop (single + dual mode) ──
   useEffect(() => {
     if (store.annotationMode === 'change_detection') {
-      renderCanvas(leftCanvasRef.current, beforeImageObj)
-      renderCanvas(canvasRef.current, imageObj)
+      renderCanvas(leftCanvasRef.current, beforeImageObj, store.selectedBeforeMonth)
+      renderCanvas(canvasRef.current, imageObj, store.selectedAfterMonth)
     } else {
-      renderCanvas(canvasRef.current, imageObj)
+      renderCanvas(canvasRef.current, imageObj, store.selectedMonth)
     }
   }, [imageObj, beforeImageObj, store.annotationMode, renderCanvas])
 
@@ -744,6 +754,7 @@ export default function AnnotatePage() {
           ...(isCD ? { before_month: store.selectedBeforeMonth, after_month: store.selectedAfterMonth } : {}),
         })
         setFinishedGeometry(null)
+        setDrawingPoints([])
       } else if (store.maskCandidates.length > 0) {
         const mask = store.maskCandidates[store.selectedMaskIndex]
         ann = await saveAnnotation({
