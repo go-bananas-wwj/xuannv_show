@@ -179,7 +179,9 @@ async def get_patch_tile(
     else:
         # 分类任务：动态生成（period 是单月份，如 "2025-04"）
         try:
-            png_bytes = _render_seg_tile_cached(head_id, patch_id, period)
+            png_bytes = await run_in_threadpool(
+                _render_seg_tile_cached, head_id, patch_id, period
+            )
             return Response(content=png_bytes, media_type="image/png")
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))

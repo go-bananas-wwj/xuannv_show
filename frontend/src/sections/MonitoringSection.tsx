@@ -6,36 +6,22 @@ import GlassPanel from '@/components/GlassPanel'
 import MosaicViewer from '@/components/MosaicViewer'
 import PatchDetailModal from '@/components/PatchDetailModal'
 import config from '@/config.json'
+import { usePatches } from '@/App'
 
 const heads = config.available_heads
 
-// 从 public/data/patches_meta.json 加载 patches 信息
-interface PatchInfo {
-  patch_id: string
-  ix: number
-  iy: number
-}
-
 export default function MonitoringSection() {
+  const patchesRaw = usePatches()
   const [activeHead, setActiveHead] = useState<string | null>(null)
   const [selectedPeriod, setSelectedPeriod] = useState('2025-04_vs_2025-10')
   const [availablePeriods, setAvailablePeriods] = useState<{ label: string; value: string }[]>([])
-  const [patches, setPatches] = useState<PatchInfo[]>([])
   const [detailPatch, setDetailPatch] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const selectedHead = heads.find((h) => h.id === activeHead)
   const isChangeDetection = selectedHead?.is_change_detection ?? false
 
-  // 加载 patches 元数据
-  useEffect(() => {
-    fetch('/data/patches_meta.json')
-      .then((res) => res.json())
-      .then((data) => {
-        setPatches(data.map((p: any) => ({ patch_id: p.patch_id, ix: p.ix, iy: p.iy })))
-      })
-      .catch((err) => console.error('Failed to load patches meta:', err))
-  }, [])
+  const patches = patchesRaw.map((p) => ({ patch_id: p.patch_id, ix: p.ix, iy: p.iy }))
 
   // 加载可用 period 列表
   useEffect(() => {

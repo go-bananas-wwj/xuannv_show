@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { LayoutGrid, MapPin, Eye, Database } from 'lucide-react'
 import {
@@ -10,8 +10,6 @@ import {
   useMapEvent,
 } from 'react-leaflet'
 import type { LatLngBoundsLiteral } from 'leaflet'
-import PatchDetailPanel from '@/components/PatchDetailPanel'
-import GlassPanel from '@/components/GlassPanel'
 
 interface PatchOverlay {
   patch_id: string
@@ -22,6 +20,9 @@ interface PatchOverlay {
   crs: string
   time_range: [string, string]
 }
+import PatchDetailPanel from '@/components/PatchDetailPanel'
+import GlassPanel from '@/components/GlassPanel'
+import { usePatches } from '@/App'
 
 function MapClickHandler({
   onMapClick,
@@ -34,7 +35,7 @@ function MapClickHandler({
 
 function MapFitBounds({ bounds }: { bounds: LatLngBoundsLiteral }) {
   const map = useMap()
-  useEffect(() => {
+  useMemo(() => {
     if (bounds.length > 0) {
       map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 })
     }
@@ -42,37 +43,96 @@ function MapFitBounds({ bounds }: { bounds: LatLngBoundsLiteral }) {
   return null
 }
 
+function useVisiblePatches(patches: PatchOverlay[]) {
+  const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set(patches.map((p) => p.patch_id)))
+  const map = useMap()
+  const updateVisible = useCallback(() => {
+    const bounds = map.getBounds()
+    const visible = new Set<string>()
+    for (const p of patches) {
+      const [w, s, e, n] = p.bounds_wgs84
+      if (bounds.intersects([
+        [s, w],
+        [n, e],
+      ] as LatLngBoundsLiteral)) {
+        visible.add(p.patch_id)
+      }
+    }
+    setVisibleIds(visible)
+  }, [map, patches])
+  useMapEvent('moveend', updateVisible)
+  useMapEvent('zoomend', updateVisible)
+  return visibleIds
+}
+
 function formatPatchId(patchId: string): string {
   const num = patchId.replace(/^patch_0*/, '')
   return `${num}号栅格`
 }
 
+function VisiblePatchesRenderer({
+  patches,
+  previewPatch,
+  patchBounds,
+  handlePatchClick,
+}: {
+  patches: PatchOverlay[]
+  previewPatch: PatchOverlay | null
+  patchBounds: (p: PatchOverlay) => LatLngBoundsLiteral
+  handlePatchClick: (patch: PatchOverlay) => void
+}) {
+  const visibleIds = useVisiblePatches(patches)
+  return (
+    <>
+      {patches.map((patch) => {
+        if (!visibleIds.has(patch.patch_id)) return null
+        const isPreview = previewPatch?.patch_id === patch.patch_id
+        return (
+          <Rectangle
+            key={patch.patch_id}
+            bounds={patchBounds(patch)}
+            pathOptions={{
+              color: isPreview ? '#f59e0b' : '#0ea5e9',
+              weight: isPreview ? 2.5 : 1,
+              fillColor: isPreview ? '#f59e0b' : '#0ea5e9',
+              fillOpacity: isPreview ? 0.35 : 0.12,
+            }}
+            eventHandlers={{
+              click: (e) => {
+                e.originalEvent.stopPropagation()
+                handlePatchClick(patch)
+              },
+            }}
+          >
+            <Popup>
+              <div className="text-sm">
+                <p className="font-medium text-slate-800">
+                  {formatPatchId(patch.patch_id)}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {Object.keys(patch.sources).length} 种传感器
+                </p>
+                <button
+                  onClick={() => handlePatchClick(patch)}
+                  className="mt-2 flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700"
+                >
+                  <Eye className="w-3 h-3" />
+                  查看详情
+                </button>
+              </div>
+            </Popup>
+          </Rectangle>
+        )
+      })}
+    </>
+  )
+}
+
 export default function DataSection() {
-  const [patches, setPatches] = useState<PatchOverlay[]>([])
+  const patches = usePatches()
   const [previewPatch, setPreviewPatch] = useState<PatchOverlay | null>(null)
   const [detailPatch, setDetailPatch] = useState<PatchOverlay | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    fetch('/data/patches_meta.json')
-      .then((res) => res.json())
-      .then((data) => {
-        const valid = data
-          .filter((p: any) => p.bounds_wgs84 && p.bounds_wgs84.length === 4)
-          .map((p: any) => ({
-            patch_id: p.patch_id,
-            ix: p.ix ?? 0,
-            iy: p.iy ?? 0,
-            bounds_wgs84: p.bounds_wgs84 as [number, number, number, number],
-            sources: p.sources,
-            crs: p.crs,
-            time_range: p.time_range,
-          }))
-        setPatches(valid)
-      })
-      .catch((err) => console.error('Failed to load patches:', err))
-      .finally(() => setLoading(false))
-  }, [])
+  const loading = patches.length === 0
 
   const allBounds: LatLngBoundsLiteral = useMemo(() => {
     if (patches.length === 0) return [[45.8, 126.55], [45.8, 126.55]]
@@ -215,6 +275,7 @@ export default function DataSection() {
                 <MapContainer
                   bounds={allBounds}
                   scrollWheelZoom={true}
+                  preferCanvas={true}
                   style={{ height: '100%', width: '100%' }}
                 >
                   <TileLayer
@@ -223,45 +284,12 @@ export default function DataSection() {
                   />
                   <MapFitBounds bounds={allBounds} />
                   <MapClickHandler onMapClick={handleMapClick} />
-                  {patches.map((patch) => {
-                    const isPreview = previewPatch?.patch_id === patch.patch_id
-                    return (
-                      <Rectangle
-                        key={patch.patch_id}
-                        bounds={patchBounds(patch)}
-                        pathOptions={{
-                          color: isPreview ? '#f59e0b' : '#0ea5e9',
-                          weight: isPreview ? 2.5 : 1,
-                          fillColor: isPreview ? '#f59e0b' : '#0ea5e9',
-                          fillOpacity: isPreview ? 0.35 : 0.12,
-                        }}
-                        eventHandlers={{
-                          click: (e) => {
-                            e.originalEvent.stopPropagation()
-                            handlePatchClick(patch)
-                          },
-                        }}
-                      >
-                        <Popup>
-                          <div className="text-sm">
-                            <p className="font-medium text-slate-800">
-                              {formatPatchId(patch.patch_id)}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1">
-                              {Object.keys(patch.sources).length} 种传感器
-                            </p>
-                            <button
-                              onClick={() => handlePatchClick(patch)}
-                              className="mt-2 flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700"
-                            >
-                              <Eye className="w-3 h-3" />
-                              查看详情
-                            </button>
-                          </div>
-                        </Popup>
-                      </Rectangle>
-                    )
-                  })}
+                  <VisiblePatchesRenderer
+                    patches={patches}
+                    previewPatch={previewPatch}
+                    patchBounds={patchBounds}
+                    handlePatchClick={handlePatchClick}
+                  />
                 </MapContainer>
               </div>
             )}

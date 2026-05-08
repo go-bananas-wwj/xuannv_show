@@ -45,7 +45,7 @@ TASK_CONFIG = {
     },
     "building_extraction": {
         "gt_source": "osm_buildings", "gt_file": "static.tif", "model_file": "building_sklearn_mlp.pkl",
-        "class_names": ["非建筑", "建筑"], "colors": [(100,100,100),(250,0,0)],
+        "class_names": ["非建筑", "建筑"], "colors": [(200,200,200),(250,0,0)],
         "f1_average": "binary",
     },
 }

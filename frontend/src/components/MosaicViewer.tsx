@@ -188,7 +188,7 @@ export default function MosaicViewer({
               width: tileSize * scale,
               height: tileSize * scale,
               opacity: isLoading && !allLoaded ? 0.3 : 1,
-              imageRendering: 'auto',
+              imageRendering: 'pixelated',
               borderRadius: 2,
               boxShadow: isHovered
                 ? '0 0 8px 2px rgba(14,165,233,0.6), inset 0 0 0 2px rgba(14,165,233,0.8)'

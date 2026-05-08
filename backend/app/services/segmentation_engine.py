@@ -67,6 +67,39 @@ class SegmentationEngine:
             raise FileNotFoundError(f"Embedding not found: {path}")
         return np.load(path)
 
+    def _postprocess(self, pred: np.ndarray, head_id: str) -> np.ndarray:
+        """后处理：去除零散噪点，保留大块真实目标."""
+        from scipy import ndimage
+
+        n_classes = len(self.models[head_id]["classes"])
+
+        if n_classes == 2:
+            # 二分类：opening + 连通域小面积过滤
+            foreground = (pred == 1).astype(np.uint8)
+            # 1. 形态学 opening（3×3）去除单/双像素孤立噪点
+            foreground = ndimage.binary_opening(
+                foreground, structure=np.ones((3, 3))
+            ).astype(np.uint8)
+            # 2. 连通域过滤：移除面积 < 5 像素的区域
+            labeled, num = ndimage.label(foreground)
+            if num > 0:
+                sizes = ndimage.sum(foreground, labeled, range(1, num + 1))
+                remove_labels = np.where(sizes < 5)[0] + 1
+                if len(remove_labels) > 0:
+                    remove_mask = np.isin(labeled, remove_labels)
+                    foreground[remove_mask] = 0
+            result = np.where(foreground, 1, 0).astype(np.int32)
+        else:
+            # 多分类：3×3 多数投票平滑
+            def _majority(v: np.ndarray) -> int:
+                vals, counts = np.unique(v, return_counts=True)
+                return int(vals[np.argmax(counts)])
+
+            result = ndimage.generic_filter(
+                pred.astype(np.int32), _majority, size=3, mode="nearest"
+            )
+        return result
+
     def infer(self, head_id: str, patch_id: str, month: str) -> np.ndarray:
         """推理分类图 [H, W]，值为类别索引 0~C-1."""
         emb = self._load_embedding(patch_id, month)  # [D, H, W]
@@ -78,7 +111,10 @@ class SegmentationEngine:
         flat = emb.reshape(D, -1).T  # [H*W, D]
         flat_s = scaler.transform(flat)
         pred = lr.predict(flat_s).reshape(H, W)  # [H, W]
-        return pred.astype(np.int32)
+        pred = pred.astype(np.int32)
+        # 后处理去噪
+        pred = self._postprocess(pred, head_id)
+        return pred
 
     def render_mosaic_tile(self, head_id: str, patch_id: str, month: str, size: int = 128) -> Image.Image:
         """生成 mosaic tile：分类图 → 颜色编码 → 128x128."""

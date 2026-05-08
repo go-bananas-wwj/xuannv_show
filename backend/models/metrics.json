@@ -1,9 +1,59 @@
 [
-  {"task": "worldcover", "balanced_accuracy": 0.525, "f1_score": 0.474, "f1_average": "macro", "head_type": "linear_probe"},
-  {"task": "building_extraction", "balanced_accuracy": 0.570, "f1_score": 0.295, "f1_average": "binary", "head_type": "linear_probe"},
-  {"task": "jrc_water", "balanced_accuracy": 0.711, "f1_score": 0.790, "f1_average": "binary", "head_type": "linear_probe"},
-  {"task": "dynamic_world", "balanced_accuracy": 0.414, "f1_score": 0.406, "f1_average": "macro", "head_type": "linear_probe"},
-  {"task": "building_extraction", "balanced_accuracy": 0.957, "f1_score": 0.956, "f1_average": "binary", "head_type": "sklearn_mlp"},
-  {"task": "jrc_water", "balanced_accuracy": 0.822, "f1_score": 0.862, "f1_average": "binary", "head_type": "sklearn_mlp"},
-  {"task": "dynamic_world", "balanced_accuracy": 0.502, "f1_score": 0.496, "f1_average": "macro", "head_type": "sklearn_mlp"}
+  {
+    "task": "worldcover",
+    "balanced_accuracy": 0.525,
+    "f1_score": 0.474,
+    "f1_average": "macro",
+    "head_type": "linear_probe"
+  },
+  {
+    "task": "building_extraction",
+    "balanced_accuracy": 0.57,
+    "f1_score": 0.295,
+    "f1_average": "binary",
+    "head_type": "linear_probe"
+  },
+  {
+    "task": "jrc_water",
+    "balanced_accuracy": 0.711,
+    "f1_score": 0.79,
+    "f1_average": "binary",
+    "head_type": "linear_probe"
+  },
+  {
+    "task": "dynamic_world",
+    "balanced_accuracy": 0.414,
+    "f1_score": 0.406,
+    "f1_average": "macro",
+    "head_type": "linear_probe"
+  },
+  {
+    "task": "building_extraction",
+    "balanced_accuracy": 0.957,
+    "f1_score": 0.956,
+    "f1_average": "binary",
+    "head_type": "sklearn_mlp"
+  },
+  {
+    "task": "jrc_water",
+    "balanced_accuracy": 0.822,
+    "f1_score": 0.862,
+    "f1_average": "binary",
+    "head_type": "sklearn_mlp"
+  },
+  {
+    "task": "dynamic_world",
+    "balanced_accuracy": 0.502,
+    "f1_score": 0.496,
+    "f1_average": "macro",
+    "head_type": "sklearn_mlp"
+  },
+  {
+    "task": "building_extraction_sklearn_mlp",
+    "n_samples": 80000,
+    "n_classes": 2,
+    "balanced_accuracy": 0.9571375,
+    "f1_score": 0.9557394188943245,
+    "f1_average": "binary"
+  }
 ]
