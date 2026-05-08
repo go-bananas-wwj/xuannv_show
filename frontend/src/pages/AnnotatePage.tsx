@@ -1681,7 +1681,28 @@ export default function AnnotatePage() {
                   return (
                     <div
                       key={ann.id}
-                      onClick={() => setSelectedAnnotationId(isSelected ? null : ann.id)}
+                      onClick={() => {
+                        // Jump to the patch & month of this annotation
+                        if (store.selectedPatch?.patch_id !== ann.patch_id) {
+                          const targetPatch = patches.find((p) => p.patch_id === ann.patch_id)
+                          if (targetPatch) {
+                            store.setSelectedPatch(targetPatch)
+                          }
+                        }
+                        if (ann.before_month && ann.after_month) {
+                          if (store.annotationMode !== 'change_detection') {
+                            store.setAnnotationMode('change_detection')
+                          }
+                          store.setSelectedBeforeMonth(ann.before_month)
+                          store.setSelectedAfterMonth(ann.after_month)
+                        } else {
+                          if (store.annotationMode !== 'segmentation') {
+                            store.setAnnotationMode('segmentation')
+                          }
+                          store.setSelectedMonth(ann.month)
+                        }
+                        setSelectedAnnotationId(isSelected ? null : ann.id)
+                      }}
                       className={cn(
                         'flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors',
                         isSelected
