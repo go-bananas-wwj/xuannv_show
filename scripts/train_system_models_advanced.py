@@ -243,7 +243,12 @@ def main():
 
     # Model
     model = PixelMLP(in_dim=X.shape[1], hidden_dims=HEAD_CONFIG[args.head], num_classes=num_classes).to(device)
-    criterion = nn.CrossEntropyLoss()
+    # Class weights for imbalance
+    class_counts = np.bincount(y_mapped)
+    class_weights = 1.0 / class_counts.astype(np.float32)
+    class_weights = class_weights / class_weights.sum() * len(class_counts)
+    cw_tensor = torch.from_numpy(class_weights).float().to(device)
+    criterion = nn.CrossEntropyLoss(weight=cw_tensor)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 

@@ -42,9 +42,9 @@ class SegmentationEngine:
         self.models: dict[str, dict] = {}
         _MODEL_FILENAME_MAP = {
             "worldcover": "worldcover_linear_probe.pkl",
-            "dynamic_world": "dynamic_world_linear_probe.pkl",
-            "jrc_water": "jrc_water_linear_probe.pkl",
-            "building_extraction": "building_linear_probe.pkl",
+            "dynamic_world": "dynamic_world_sklearn_mlp.pkl",
+            "jrc_water": "jrc_water_sklearn_mlp.pkl",
+            "building_extraction": "building_sklearn_mlp.pkl",
         }
         for head_id in ["worldcover", "dynamic_world", "jrc_water", "building_extraction"]:
             path = MODEL_DIR / _MODEL_FILENAME_MAP[head_id]
