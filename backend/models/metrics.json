@@ -30,5 +30,13 @@
     "balanced_accuracy": 0.4139333333333333,
     "f1_score": 0.40620731802041365,
     "f1_average": "macro"
+  },
+  {
+    "task": "jrc_water_mlp",
+    "n_samples": 67160,
+    "n_classes": 2,
+    "balanced_accuracy": 0.4977274852724595,
+    "f1_score": 0.607628629337501,
+    "f1_average": "binary"
   }
 ]
