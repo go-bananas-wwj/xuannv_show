@@ -51,7 +51,7 @@ export default function AboutClosing() {
       {/* Footer */}
       <div className="absolute bottom-0 left-0 right-0 py-8 text-center">
         <p className="text-sm text-slate-500">
-          玄女底座 Visualization Platform · AlphaEarth Foundations
+          玄女底座 Visualization Platform · Xuannv Foundations
         </p>
       </div>
     </section>

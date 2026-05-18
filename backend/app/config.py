@@ -27,10 +27,10 @@ class Settings(BaseSettings):
         description="项目根目录（xuannv_show/）",
     )
 
-    # ── 外部依赖：AlphaEarth Foundations 核心代码仓库 ──
+    # ── 外部依赖：Xuannv Foundations 核心代码仓库 ──
     xuannv_root: Path = Field(
         default=Path("/workspace/xuannv"),
-        description="AlphaEarth 核心模型代码仓库路径",
+        description="Xuannv 核心模型代码仓库路径",
     )
 
     # ── 数据路径 ──

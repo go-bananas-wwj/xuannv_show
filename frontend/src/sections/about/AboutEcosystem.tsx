@@ -11,7 +11,7 @@ const projects = [
     color: '#0ea5e9',
   },
   {
-    name: 'AlphaEarth Foundations',
+    name: 'Xuannv Foundations',
     desc: '底层预训练模型，为玄女底座提供强大的嵌入能力',
     icon: ExternalLink,
     cta: '了解模型',

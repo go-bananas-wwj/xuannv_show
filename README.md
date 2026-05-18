@@ -144,4 +144,4 @@ xuannv_show/
 
 本项目采用 [MIT License](LICENSE) 开源。
 
-Copyright (c) 2026 AlphaEarth Foundations
+Copyright (c) 2026 Xuannv Foundations
