@@ -25,6 +25,11 @@
 
 无需安装，打开浏览器即可直接体验平台全部功能。
 
+## 📦 ModelScope 资源
+
+- **下游任务模型**：[WeijieWu/xuannv-downstream-models](https://modelscope.cn/models/WeijieWu/xuannv-downstream-models) — sklearn 分类模型 + 变化检测头
+- **哈尔滨遥感数据集**：[WeijieWu/xuannv_embdding](https://modelscope.cn/datasets/WeijieWu/xuannv_embdding) — 多源遥感数据 + 预计算嵌入向量 + patch_000186 最小化测试集
+
 ## 🚀 快速开始
 
 ### 环境要求
