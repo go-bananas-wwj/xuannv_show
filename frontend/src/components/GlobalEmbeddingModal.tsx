@@ -1,6 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, ZoomIn, ZoomOut, Info, Globe } from 'lucide-react'
+import { X, ZoomIn, ZoomOut, Info, Globe, Image, Sparkles } from 'lucide-react'
+
+interface EmbeddingPreset {
+  id: string
+  name: string
+  color: string
+}
 
 interface GlobalEmbeddingModalProps {
   isOpen: boolean
@@ -25,10 +31,27 @@ export default function GlobalEmbeddingModal({ isOpen, onClose }: GlobalEmbeddin
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [viewMode, setViewMode] = useState<'pca' | 'semantic'>('pca')
+  const [activePreset, setActivePreset] = useState<string>('water')
+  const [presets, setPresets] = useState<EmbeddingPreset[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
 
   const currentMonth = MONTHS[monthIndex]
-  const imageUrl = `/data/embeddings/global/${currentMonth}.png`
+  const imageUrl = viewMode === 'pca'
+    ? `/data/embeddings/global/${currentMonth}.png`
+    : `/data/embeddings/semantic/${activePreset}/${currentMonth}.png`
+
+  // Load presets on mount
+  useEffect(() => {
+    if (!isOpen) return
+    fetch('/api/embeddings/presets')
+      .then((r) => r.json())
+      .then((data: EmbeddingPreset[]) => {
+        setPresets(data)
+        if (data.length > 0) setActivePreset(data[0].id)
+      })
+      .catch(() => {})
+  }, [isOpen])
 
   const MIN_SCALE = 0.08
   const MAX_SCALE = 4.0
@@ -193,6 +216,67 @@ export default function GlobalEmbeddingModal({ isOpen, onClose }: GlobalEmbeddin
 
               {/* Right: Sidebar */}
               <div className="w-80 shrink-0 border-l border-slate-200/60 bg-white flex flex-col overflow-y-auto">
+                {/* View mode toggle */}
+                <div className="p-5 border-b border-slate-100">
+                  <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-sky-500" />
+                    视图模式
+                  </h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setViewMode('pca')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                        viewMode === 'pca'
+                          ? 'bg-sky-500 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Image className="w-3.5 h-3.5" />
+                      PCA-RGB
+                    </button>
+                    <button
+                      onClick={() => setViewMode('semantic')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                        viewMode === 'semantic'
+                          ? 'bg-sky-500 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      语义预设
+                    </button>
+                  </div>
+                </div>
+
+                {/* Semantic preset selector */}
+                {viewMode === 'semantic' && (
+                  <div className="px-5 py-3 border-b border-slate-100">
+                    <div className="flex flex-wrap gap-2">
+                      {presets.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setActivePreset(p.id)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                            activePreset === p.id
+                              ? 'text-white shadow-sm'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                          }`}
+                          style={
+                            activePreset === p.id
+                              ? { backgroundColor: p.color, borderColor: p.color }
+                              : {}
+                          }
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">
+                      基于线性探针权重，突出与该地类最相关的嵌入维度
+                    </p>
+                  </div>
+                )}
+
                 {/* Month selector */}
                 <div className="p-5 border-b border-slate-100">
                   <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
@@ -227,37 +311,87 @@ export default function GlobalEmbeddingModal({ isOpen, onClose }: GlobalEmbeddin
 
                 {/* Info panel */}
                 <div className="p-5 flex-1">
-                  <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                    <Info className="w-4 h-4 text-sky-500" />
-                    什么是地球嵌入？
-                  </h3>
-                  <div className="text-xs text-slate-500 leading-relaxed space-y-3">
-                    <p>
-                      地球嵌入（Earth Embedding）是遥感与 AI 交叉领域最近迅速兴起的概念。
-                      它借鉴了大语言模型中"词嵌入"的思想——将复杂的卫星影像数据压缩成紧凑的
-                      <strong className="text-slate-700">高维向量</strong>，
-                      让计算机能够"读懂"地球表面的每一寸土地。
-                    </p>
-                    <p>
-                      传统的遥感分析需要人工设计特征、标注大量样本。而地球嵌入通过自监督学习
-                      从海量卫星影像中提取通用表征：植被、建筑、水体、道路、农田……所有地物
-                      类型都被编码为向量空间中的坐标。相似的地表环境产生相似的嵌入向量，
-                      不同的环境则分布在向量空间的不同区域。
-                    </p>
-                    <div className="bg-slate-50 rounded-lg p-3 space-y-1.5">
-                      <p className="text-xs font-medium text-slate-600">这种"地表语义向量"具有惊人的通用性：</p>
-                      <ul className="text-xs text-slate-500 space-y-1 list-disc list-inside">
-                        <li>无需重新训练即可适配变化检测、地物分类、相似性检索等下游任务</li>
-                        <li>跨时间、跨区域保持一致性，支持长时序监测与全球尺度分析</li>
-                        <li>向量运算揭示地理规律——嵌入差分可量化城市化进程、植被退化、灾害影响</li>
-                      </ul>
-                    </div>
-                    <p>
-                      上图通过 <strong className="text-slate-700">PCA</strong> 将高维嵌入投影到 RGB 颜色空间进行可视化。
-                      不同颜色代表不同的地表特征簇，让你一眼"看见"机器眼中的地球。
-                      鼠标滚轮缩放，拖拽平移查看细节。
-                    </p>
-                  </div>
+                  {viewMode === 'pca' ? (
+                    <>
+                      <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                        <Info className="w-4 h-4 text-sky-500" />
+                        什么是地球嵌入？
+                      </h3>
+                      <div className="text-xs text-slate-500 leading-relaxed space-y-3">
+                        <p>
+                          地球嵌入（Earth Embedding）是遥感与 AI 交叉领域最近迅速兴起的概念。
+                          它借鉴了大语言模型中"词嵌入"的思想——将复杂的卫星影像数据压缩成紧凑的
+                          <strong className="text-slate-700">高维向量</strong>，
+                          让计算机能够"读懂"地球表面的每一寸土地。
+                        </p>
+                        <p>
+                          上图通过 <strong className="text-slate-700">PCA</strong> 将高维嵌入投影到 RGB 颜色空间进行可视化。
+                          不同颜色代表不同的地表特征簇，让你一眼"看见"机器眼中的地球。
+                          鼠标滚轮缩放，拖拽平移查看细节。
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                        <Info className="w-4 h-4 text-sky-500" />
+                        🔍 语义预设图例
+                      </h3>
+                      <div className="text-xs text-slate-500 leading-relaxed space-y-3">
+                        <p>
+                          <strong className="text-slate-700">语义预设 = AI 的「地类透视」</strong>
+                        </p>
+                        <p>
+                          模型把每个像素编码成 128 个数字的内部特征。我们把
+                          <strong className="text-sky-600">跟「{presets.find(p => p.id === activePreset)?.name || ''}」最相关的 3 个特征维度</strong>
+                          提取出来，合成一张 RGB 图。
+                        </p>
+
+                        <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+                          <p className="text-xs font-medium text-slate-600">👀 看图口诀</p>
+                          <div className="grid grid-cols-1 gap-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">✨</span>
+                              <span><strong className="text-slate-700">颜色越亮越纯</strong> → 模型越确定</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">🌑</span>
+                              <span><strong className="text-slate-700">发暗发黑</strong> → 模型觉得不是这类</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">🎯</span>
+                              <span><strong className="text-slate-700">对照卫星图</strong> → 验证准不准</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-medium text-slate-600 mb-1.5">五种地类预设</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {presets.map((p) => (
+                              <div
+                                key={p.id}
+                                className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] border"
+                                style={{
+                                  backgroundColor: `${p.color}10`,
+                                  borderColor: `${p.color}30`,
+                                  color: p.color,
+                                }}
+                              >
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+                                {p.name}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <p className="text-[10px] text-slate-400">
+                          技术细节：基于 Linear Probe 权重提取 Top-3 维度，全局归一化后映射 RGB。
+                          亮区是模型自己学会的「{presets.find(p => p.id === activePreset)?.name || ''}直觉」。
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

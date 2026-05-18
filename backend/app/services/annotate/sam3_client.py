@@ -71,17 +71,23 @@ class SAM3Client:
             return "cpu"
         # 优先使用 gpu6（业务约束），但检查是否可用
         if torch.cuda.device_count() > 6:
-            mem_free, _ = torch.cuda.mem_get_info(6)
-            if mem_free > 2 * 1024**3:  # 至少 2GB 空闲
-                return "cuda:6"
+            try:
+                mem_free, _ = torch.cuda.mem_get_info(6)
+                if mem_free > 2 * 1024**3:  # 至少 2GB 空闲
+                    return "cuda:6"
+            except RuntimeError:
+                pass  # cuda:6 异常，继续 fallback
         # fallback：选显存最空闲的
         best_device = 0
         best_free = 0
         for i in range(torch.cuda.device_count()):
-            mem_free, _ = torch.cuda.mem_get_info(i)
-            if mem_free > best_free:
-                best_free = mem_free
-                best_device = i
+            try:
+                mem_free, _ = torch.cuda.mem_get_info(i)
+                if mem_free > best_free:
+                    best_free = mem_free
+                    best_device = i
+            except RuntimeError:
+                continue  # 跳过异常设备
         return f"cuda:{best_device}"
 
     def warmup(self) -> None:
@@ -92,37 +98,11 @@ class SAM3Client:
 
     def _load_s2_image(self, patch_id: str, month: str) -> Path:
         """Load S2 image for a patch and save as temporary PNG for SAM3."""
-        from demo_v2.utils.constants import TIME_WINDOWS, RAW_DIR as DEMO_RAW_DIR
-        from demo_v2.engines.patch_image_loader import _find_best_tif
-        import rasterio
+        from app.services.patch_image_loader import load_s2_rgb_natural
 
-        window = TIME_WINDOWS.get(month)
-        if window is None:
-            raise ValueError(f"Unknown month: {month}")
-
-        source_dir = DEMO_RAW_DIR / "s2" / patch_id
-        tif_path = _find_best_tif(source_dir, window[0], window[1])
-        if tif_path is None:
+        rgb = load_s2_rgb_natural(patch_id, month, out_size=256)
+        if rgb is None:
             raise FileNotFoundError(f"No S2 image found for {patch_id} {month}")
-
-        with rasterio.open(str(tif_path)) as ds:
-            data = ds.read()
-
-        if data.shape[0] >= 4:
-            rgb = data[[2, 1, 0]].astype(np.float32)
-        elif data.shape[0] >= 3:
-            rgb = data[:3].astype(np.float32)
-        else:
-            raise ValueError(f"Not enough bands in {tif_path}")
-
-        rgb = np.clip(rgb / 3500.0, 0, 1)
-        rgb = rgb.transpose(1, 2, 0)
-
-        # Resize to 256x256 for SAM3 (and to match our display)
-        if rgb.shape[0] != 256 or rgb.shape[1] != 256:
-            img = Image.fromarray((rgb * 255).astype(np.uint8))
-            img = img.resize((256, 256), Image.Resampling.LANCZOS)
-            rgb = np.array(img).astype(np.float32) / 255.0
 
         temp_path = self._temp_dir / f"{patch_id}_{month}.png"
         Image.fromarray((rgb * 255).astype(np.uint8)).save(temp_path)

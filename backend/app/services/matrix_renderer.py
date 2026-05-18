@@ -60,7 +60,7 @@ WORLDCOVER_COLORS = {
 _VALID_PATCH_ID_RE = re.compile(r"^patch_\d{6}$")
 _MAX_MATRIX_COLS = 36  # 限制最大列数，防止超大 figure
 _MAX_MATRIX_ROWS = 12  # 限制最大行数
-_MATRIX_DPI = 100      # 降低 DPI 减少内存占用
+_MATRIX_DPI = 72       # 降低 DPI 减少内存占用和渲染时间
 
 
 def validate_patch_id(patch_id: str) -> bool:
@@ -125,13 +125,17 @@ def render_time_source_matrix(patch_id: str) -> bytes | None:
             return m.group(1)
         return None
 
-    def _month_label(date_str: str) -> str:
+    def _month_label(date_str: str) -> str | None:
         if 'Q' in date_str:
             year = date_str[:4]
             quarter = int(date_str[-1])
             month_map = {1: '02', 2: '05', 3: '08', 4: '11'}
             return f"{year}-{month_map[quarter]}"
-        return f"{date_str[:4]}-{date_str[4:6]}"
+        month = f"{date_str[:4]}-{date_str[4:6]}"
+        # 只保留 2025 年的数据以加速渲染
+        if month.startswith('2025-'):
+            return month
+        return None
 
     def _render_thumb(ax, tif_path: Path, src_name: str) -> None:
         """渲染单个缩略图到 axes."""
@@ -194,15 +198,16 @@ def render_time_source_matrix(patch_id: str) -> bytes | None:
                 date = _extract_date(f.stem)
                 if date:
                     ml = _month_label(date)
-                    month_groups.setdefault(ml, []).append(f)
-                    all_months.add(ml)
+                    if ml:
+                        month_groups.setdefault(ml, []).append(f)
+                        all_months.add(ml)
         fb_dir = _fallback_src_dir(src)
         if fb_dir.exists():
             for f in sorted(fb_dir.glob("*.tif")):
                 date = _extract_date(f.stem)
                 if date:
                     ml = _month_label(date)
-                    if ml not in month_groups:
+                    if ml and ml not in month_groups:
                         month_groups[ml] = [f]
                         all_months.add(ml)
         if month_groups:
@@ -246,7 +251,7 @@ def render_time_source_matrix(patch_id: str) -> bytes | None:
     if n_months > _MAX_MATRIX_COLS:
         sorted_months = sorted_months[:_MAX_MATRIX_COLS]
 
-    cell_w, cell_h = 1.6, 1.4
+    cell_w, cell_h = 1.2, 1.0
     fig_w = 2.0 + cell_w * n_cols + 0.3
     fig_h = 1.2 + cell_h * n_rows + 0.3
     fig, axes = plt.subplots(

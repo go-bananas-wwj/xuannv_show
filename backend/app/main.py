@@ -165,26 +165,18 @@ async def get_patch_image(patch_id: str, month: str, source: str = "s2") -> byte
         return Response(content=cached, media_type="image/jpeg")
 
     # 2. 未命中：实时生成
-    from demo_v2.utils.constants import TIME_WINDOWS
-    from demo_v2.engines.patch_image_loader import load_patch_source_rgb
+    from app.services.patch_image_loader import TIME_WINDOWS, load_patch_source_rgb
 
     window = TIME_WINDOWS.get(month)
     if window is None:
         raise HTTPException(status_code=400, detail=f"Unknown month: {month}")
 
-    rgb = load_patch_source_rgb(patch_id, source, window)
+    rgb = load_patch_source_rgb(patch_id, source, window, out_size=256)
     if rgb is None:
         raise HTTPException(status_code=404, detail=f"No {source} image found for {patch_id} {month}")
 
-    # Resize to 256x256
-    if rgb.shape[0] != 256 or rgb.shape[1] != 256:
-        img = Image.fromarray(rgb)
-        img = img.resize((256, 256), Image.Resampling.LANCZOS)
-    else:
-        img = Image.fromarray(rgb)
-
     buf = BytesIO()
-    img.save(buf, format="JPEG", quality=85)
+    Image.fromarray(rgb).save(buf, format="JPEG", quality=85)
     data = buf.getvalue()
 
     # 3. 写入缓存

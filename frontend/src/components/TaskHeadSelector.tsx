@@ -5,6 +5,9 @@ import {
   Trees,
   Waves,
   Building2,
+  HardHat,
+  Construction,
+  Wheat,
   type LucideProps,
 } from 'lucide-react'
 import GlassPanel from './GlassPanel'
@@ -29,6 +32,9 @@ const iconMap: Record<string, React.FC<LucideProps>> = {
   trees: Trees,
   waves: Waves,
   building2: Building2,
+  'hard-hat': HardHat,
+  construction: Construction,
+  wheat: Wheat,
 }
 
 export default function TaskHeadSelector({

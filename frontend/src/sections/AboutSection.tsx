@@ -4,6 +4,8 @@ import {
   Info,
   ChevronLeft,
   ChevronRight,
+  ArrowRight,
+  ChevronDown,
   Layers,
   BarChart3,
   Map,
@@ -13,6 +15,11 @@ import {
   Building2,
   TreePine,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+
+interface AboutSectionProps {
+  onExploreData?: () => void
+}
 
 const TABS = [
   { id: 0, label: '玄女底座是什么', icon: Info },
@@ -63,7 +70,8 @@ const METRICS = [
   { label: '支持传感器', value: '5', unit: '种', desc: 'S2/S1/Landsat/高分光学/高分雷达' },
 ]
 
-export default function AboutSection() {
+export default function AboutSection({ onExploreData }: AboutSectionProps) {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState(0)
   const [direction, setDirection] = useState(1)
 
@@ -78,7 +86,7 @@ export default function AboutSection() {
 
   const slideVariants = {
     enter: (dir: number) => ({
-      x: dir > 0 ? 80 : -80,
+      x: dir > 0 ? 180 : -180,
       opacity: 0,
     }),
     center: {
@@ -86,7 +94,7 @@ export default function AboutSection() {
       opacity: 1,
     },
     exit: (dir: number) => ({
-      x: dir > 0 ? -80 : 80,
+      x: dir > 0 ? -180 : 180,
       opacity: 0,
     }),
   }
@@ -95,8 +103,9 @@ export default function AboutSection() {
   const CurrentIcon = currentTab.icon
 
   return (
-    <section id="section-about" className="relative py-24 overflow-hidden">
+    <section id="section-about" className="relative py-24 overflow-hidden bg-slate-50">
       <div className="w-full px-4 md:px-8">
+        {/* Title — left aligned */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -112,11 +121,14 @@ export default function AboutSection() {
               平台介绍
             </h2>
           </div>
+          <p className="text-slate-500 max-w-2xl">
+            了解玄女底座的核心能力、应用场景与数据覆盖范围
+          </p>
         </motion.div>
 
         {/* Full-width carousel container */}
-        <div className="relative min-h-[580px] md:min-h-[620px]">
-          {/* Left arrow - absolute at screen edge */}
+        <div className="relative min-h-[520px] md:min-h-[560px]">
+          {/* Left arrow */}
           <button
             onClick={goPrev}
             className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full glass border border-slate-200/80 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-white/90 transition-all duration-300 shadow-sm"
@@ -125,7 +137,7 @@ export default function AboutSection() {
             <ChevronLeft className="w-6 h-6" />
           </button>
 
-          {/* Right arrow - absolute at screen edge */}
+          {/* Right arrow */}
           <button
             onClick={goNext}
             className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full glass border border-slate-200/80 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-white/90 transition-all duration-300 shadow-sm"
@@ -145,9 +157,8 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
                 >
-                  {/* Animated tab title — the ONLY title shown */}
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -202,7 +213,7 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
                 >
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
@@ -260,7 +271,7 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
                 >
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
@@ -308,7 +319,7 @@ export default function AboutSection() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 180 }}
                 >
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
@@ -387,8 +398,8 @@ export default function AboutSection() {
             </AnimatePresence>
           </div>
 
-          {/* Dot indicators — fixed at bottom, won't move with content */}
-          <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-2">
+          {/* Dot indicators */}
+          <div className="flex justify-center gap-2 mt-8">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -404,6 +415,26 @@ export default function AboutSection() {
                 aria-label={tab.label}
               />
             ))}
+          </div>
+
+          {/* CTA buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mt-10">
+            <button
+              onClick={() => navigate('/about')}
+              className="group inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-sky-500 text-white hover:bg-sky-600 transition-all duration-300 shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30"
+            >
+              <span className="font-medium">了解详情</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </button>
+            {onExploreData && (
+              <button
+                onClick={onExploreData}
+                className="group inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-all duration-300"
+              >
+                <span className="font-medium">进入平台</span>
+                <ChevronDown className="w-4 h-4 group-hover:translate-y-0.5 transition-transform" />
+              </button>
+            )}
           </div>
         </div>
       </div>

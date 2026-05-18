@@ -33,5 +33,20 @@ data/system_model_results/
 
 # Generated assets
 frontend/public/data/embeddings/global/
+frontend/public/data/embeddings/semantic/
+frontend/public/data/matrix/
+frontend/public/data/mosaic/
+frontend/public/data/seg_tiles/
 frontend/public/videos/
+
+# Pre-computed data (harbin region)
+data/harbin/label_vis_v2/
+data/harbin/labels/
+data/harbin/labels_v2/
+data/harbin/models/
+data/harbin/models_v2/
+data/harbin/predictions/
+data/harbin/predictions_v2/
+data/harbin/results/
+data/harbin/results_v2/
 

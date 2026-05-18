@@ -994,7 +994,7 @@ export default function AnnotatePage() {
               patches={patches}
               selectedPatchId={store.selectedPatch?.patch_id || null}
               onSelectPatch={(p) => store.setSelectedPatch(p)}
-              mosaicUrl={`/api/patches/mosaic_image?month=${store.selectedMonth}&source=${dataSource}&tile_size=128`}
+              mosaicUrl={`/data/mosaic/${dataSource}/${store.selectedMonth}_128.jpg`}
             />
           </div>
         </div>

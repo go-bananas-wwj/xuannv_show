@@ -53,6 +53,24 @@
       "description": "识别和提取建筑物分布范围",
       "color": "#ef4444",
       "is_change_detection": false
+    },
+    {
+      "id": "construction",
+      "name": "建设类变化检测",
+      "nameEn": "Construction Change Detection",
+      "icon": "hard-hat",
+      "description": "建筑工地/房屋/道路建设变化检测（两期embedding差分）",
+      "color": "#f97316",
+      "is_change_detection": true
+    },
+    {
+      "id": "land_conversion",
+      "name": "土地转换检测",
+      "nameEn": "Land Conversion Detection",
+      "icon": "wheat",
+      "description": "裸地/水塘/农田转换检测（两期embedding差分）",
+      "color": "#eab308",
+      "is_change_detection": true
     }
   ],
   "time_range": ["2023-01", "2025-10"],
@@ -88,6 +106,16 @@
     "building_extraction": [
       {"label": "非建筑", "color": "#646464"},
       {"label": "建筑", "color": "#fa0000"}
+    ],
+    "construction": [
+      {"label": "低概率", "color": "#0000ff"},
+      {"label": "中概率", "color": "#00ffff"},
+      {"label": "高概率", "color": "#ff0000"}
+    ],
+    "land_conversion": [
+      {"label": "低概率", "color": "#0000ff"},
+      {"label": "中概率", "color": "#00ffff"},
+      {"label": "高概率", "color": "#ff0000"}
     ]
   }
 }

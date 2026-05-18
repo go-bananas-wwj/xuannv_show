@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, MapPin, Calendar, Database, AlertCircle, Layers } from 'lucide-react'
+import EmbeddingChannelExplorer from './EmbeddingChannelExplorer'
 
 interface PatchDetail {
   patch_id: string
@@ -40,8 +41,6 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
   const [imgLoaded, setImgLoaded] = useState(false)
   const [isEnlarged, setIsEnlarged] = useState(false)
   const [showEmbedding, setShowEmbedding] = useState(false)
-  const [embedUrl, setEmbedUrl] = useState<string | null>(null)
-  const [embedLoaded, setEmbedLoaded] = useState(false)
   const matrixUrlRef = useRef<string | null>(null)
 
   // Fetch Time×Source Matrix when patch changes
@@ -61,26 +60,38 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
     setMatrixError(false)
     setImgLoaded(false)
 
-    fetch(`/api/patches/${patch.patch_id}/matrix`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Matrix not available: ${res.status}`)
-        return res.blob()
-      })
-      .then((blob) => {
-        const url = URL.createObjectURL(blob)
-        // Revoke previous URL before setting new one
-        if (matrixUrlRef.current) {
-          URL.revokeObjectURL(matrixUrlRef.current)
-        }
-        matrixUrlRef.current = url
-        setMatrixUrl(url)
-        setMatrixLoading(false)
-      })
-      .catch((err) => {
-        console.error('Matrix fetch failed:', err)
-        setMatrixError(true)
-        setMatrixLoading(false)
-      })
+    // 优先尝试静态文件，不存在时 fallback 到 API
+    const staticUrl = `/data/matrix/${patch.patch_id}.png`
+    const apiUrl = `/api/patches/${patch.patch_id}/matrix`
+
+    const tryLoad = (url: string) => {
+      fetch(url)
+        .then((res) => {
+          if (!res.ok) throw new Error(`Matrix not available: ${res.status}`)
+          return res.blob()
+        })
+        .then((blob) => {
+          const url = URL.createObjectURL(blob)
+          if (matrixUrlRef.current) {
+            URL.revokeObjectURL(matrixUrlRef.current)
+          }
+          matrixUrlRef.current = url
+          setMatrixUrl(url)
+          setMatrixLoading(false)
+        })
+        .catch((err) => {
+          if (url === staticUrl) {
+            // 静态文件不存在，fallback 到 API
+            tryLoad(apiUrl)
+          } else {
+            console.error('Matrix fetch failed:', err)
+            setMatrixError(true)
+            setMatrixLoading(false)
+          }
+        })
+    }
+
+    tryLoad(staticUrl)
 
     return () => {
       if (matrixUrlRef.current) {
@@ -90,16 +101,11 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
     }
   }, [patch?.patch_id])
 
-  // Load embedding preview when patch changes
+  // Reset embedding panel when patch changes
   useEffect(() => {
     if (!patch) {
-      setEmbedUrl(null)
-      setEmbedLoaded(false)
       setShowEmbedding(false)
-      return
     }
-    setEmbedUrl(`/api/embeddings/preview?patch_id=${patch.patch_id}&region=harbin&version=v2`)
-    setEmbedLoaded(false)
   }, [patch?.patch_id])
 
   // Close on Escape key
@@ -191,7 +197,7 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
                 </div>
               </div>
 
-              {/* Embedding preview */}
+              {/* Embedding preview with channel explorer */}
               <div className="mb-6">
                 <button
                   onClick={() => setShowEmbedding((v) => !v)}
@@ -201,7 +207,7 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
                   {showEmbedding ? '隐藏嵌入数据集' : '展示嵌入数据集'}
                 </button>
                 <AnimatePresence>
-                  {showEmbedding && (
+                  {showEmbedding && patch && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
@@ -210,27 +216,10 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
                       className="overflow-hidden"
                     >
                       <div className="rounded-xl border border-slate-200 bg-white p-4">
-                        <div className="relative w-fit mx-auto">
-                          {!embedLoaded && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
-                              <div className="w-8 h-8 border-2 border-sky-300 border-t-sky-500 rounded-full animate-spin" />
-                            </div>
-                          )}
-                          {embedUrl && (
-                            <img
-                              src={embedUrl}
-                              alt="Embedding PCA-RGB"
-                              className="block rounded-lg"
-                              style={{ maxHeight: '300px', width: 'auto', imageRendering: 'pixelated' }}
-                              onLoad={() => setEmbedLoaded(true)}
-                              onError={() => setEmbedLoaded(false)}
-                            />
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-400 mt-3 text-center leading-relaxed">
-                          通过 PCA 将 128 维嵌入投影到 RGB 颜色空间，
-                          不同颜色反映该像素位置的地表特征语义。
-                        </p>
+                        <EmbeddingChannelExplorer
+                          patchId={patch.patch_id}
+                          month="2025-04"
+                        />
                       </div>
                     </motion.div>
                   )}

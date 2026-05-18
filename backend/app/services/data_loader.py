@@ -59,6 +59,17 @@ class DataLoader:
             return preview_path
         return None
 
+    def get_embedding_npy_path(self, patch_id: str, month: str) -> Path | None:
+        """返回 embedding .npy 文件路径（分散格式）.
+
+        路径规则: {embeddings_dir}/{patch_id}_{month}.npy
+        """
+        from app.config import settings
+        path = settings.embeddings_dir / f"{patch_id}_{month}.npy"
+        if path.exists():
+            return path
+        return None
+
     def get_head_result_path(
         self, head_id: str, period: str, region: str = "harbin", version: str = "v2"
     ) -> Path | None:
@@ -93,6 +104,8 @@ class DataLoader:
             {"id": "dynamic_world", "name": "Dynamic World分类", "description": "Google Dynamic World 9类土地利用分类"},
             {"id": "jrc_water", "name": "JRC水体提取", "description": "JRC Global Surface Water 水体提取"},
             {"id": "building_extraction", "name": "建筑物提取", "description": "基于WorldCover Built-up的建筑物提取"},
+            {"id": "construction", "name": "建设类变化检测", "description": "基于两期embedding差分训练的建筑工地/房屋/道路建设检测（Few-Shot基线）"},
+            {"id": "land_conversion", "name": "土地转换检测", "description": "基于两期embedding差分训练的裸地/水塘/农田转换检测（Few-Shot基线）"},
         ]
 
 

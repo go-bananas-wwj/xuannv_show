@@ -36,6 +36,24 @@ export default function MosaicViewer({
   const [hoveredPatch, setHoveredPatch] = useState<string | null>(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [loadedCount, setLoadedCount] = useState(0)
+  const [forceReady, setForceReady] = useState(false)
+
+  // 当 headId 或 period 变化时重置加载计数
+  useEffect(() => {
+    setLoadedCount(0)
+    setForceReady(false)
+  }, [headId, period])
+
+  // 加载超时兜底：10 秒后若仍有未加载的，强制结束 loading
+  useEffect(() => {
+    if (patches.length === 0) return
+    const timer = setTimeout(() => {
+      if (loadedCount < patches.length) {
+        setForceReady(true)
+      }
+    }, 10000)
+    return () => clearTimeout(timer)
+  }, [headId, period, patches.length, loadedCount])
 
   // 计算网格边界
   const grid = useMemo(() => {
@@ -144,7 +162,7 @@ export default function MosaicViewer({
     })
   }, [grid.mosaicW, grid.mosaicH])
 
-  const allLoaded = loadedCount >= patches.length && patches.length > 0
+  const allLoaded = (loadedCount >= patches.length && patches.length > 0) || forceReady
   const isLoading = parentLoading || (!allLoaded && patches.length > 0)
 
   return (
@@ -196,6 +214,7 @@ export default function MosaicViewer({
               zIndex: isHovered ? 10 : 1,
             }}
             onLoad={() => setLoadedCount((c) => c + 1)}
+            onError={() => setLoadedCount((c) => c + 1)}
             onMouseEnter={() => setHoveredPatch(patch.patch_id)}
             onMouseLeave={() => setHoveredPatch(null)}
             onClick={() => onPatchClick(patch.patch_id)}

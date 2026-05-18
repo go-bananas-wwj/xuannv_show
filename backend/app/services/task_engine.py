@@ -18,18 +18,6 @@ EMBEDDING_DIR = settings.embeddings_dir
 HEAD_PATH = settings.cd_head_path
 PATCHES_META_PATH = settings.patches_meta_path
 
-# S2 RGB loader (lazy import to avoid heavy deps at module load)
-_load_patch_source_rgb = None
-
-
-def _get_rgb_loader():
-    global _load_patch_source_rgb
-    if _load_patch_source_rgb is None:
-        from demo_v2.engines.patch_image_loader import load_patch_source_rgb
-        _load_patch_source_rgb = load_patch_source_rgb
-    return _load_patch_source_rgb
-
-
 def _get_freest_device() -> torch.device:
     """选择显存剩余最多的 GPU；若无可用的则回退到 CPU."""
     if not torch.cuda.is_available():
@@ -165,60 +153,37 @@ class ChangeDetectionEngine:
 
     def load_s2_rgb(self, patch_id: str, month: str, out_size: int = 256) -> np.ndarray | None:
         """加载 S2 RGB 影像 [H, W, 3] uint8."""
-        from demo_v2.utils.constants import TIME_WINDOWS
-        window = TIME_WINDOWS.get(month)
-        if window is None:
-            return None
-        try:
-            rgb = _get_rgb_loader()(patch_id, "s2", window)
-            if rgb is None:
-                return None
-            # Resize to target size
-            if rgb.shape[0] != out_size or rgb.shape[1] != out_size:
-                pil = Image.fromarray((rgb * 255).astype(np.uint8))
-                pil = pil.resize((out_size, out_size), Image.Resampling.BICUBIC)
-                rgb = np.array(pil).astype(np.float32) / 255.0
-            return rgb
-        except Exception:
-            return None
+        return self.load_s2_rgb_natural(patch_id, month, out_size)
 
     def load_s2_rgb_natural(self, patch_id: str, month: str, out_size: int = 256) -> np.ndarray | None:
-        """加载 S2 RGB 原始影像，使用固定反射率范围归一化，不做动态 percentile stretch.
-
-        Sentinel-2 地表反射率值通常已除以 10000，典型范围 0~0.3。
-        使用固定范围 [0, 3500]（反射率 0~0.35）线性映射到 [0, 255]，
-        避免动态 stretch 放大噪声。
-        """
+        """加载 S2 RGB 原始影像，使用固定反射率范围归一化."""
         import rasterio
-        from demo_v2.utils.constants import TIME_WINDOWS, RAW_DIR
-        from demo_v2.engines.patch_image_loader import _find_best_tif
 
-        window = TIME_WINDOWS.get(month)
-        if window is None:
+        source_dir = settings.raw_scenes_dir / "s2" / patch_id
+        if not source_dir.exists():
             return None
 
-        source_dir = RAW_DIR / "s2" / patch_id
-        tif_path = _find_best_tif(source_dir, window[0], window[1])
-        if tif_path is None:
+        year, mon = month.split("-")
+        prefix = f"{year}{mon}"
+        tifs = sorted(source_dir.glob(f"{prefix}*.tif"))
+        if not tifs:
             return None
+        tif_path = tifs[len(tifs) // 2]
 
         try:
             with rasterio.open(str(tif_path)) as ds:
-                data = ds.read()  # [C, H, W], reflectance * 10000
+                data = ds.read()  # [C, H, W]
 
             if data.shape[0] >= 4:
-                rgb = data[[2, 1, 0]].astype(np.float32)  # B4(R), B3(G), B2(B)
+                rgb = data[[2, 1, 0]].astype(np.float32)
             elif data.shape[0] >= 3:
                 rgb = data[:3].astype(np.float32)
             else:
                 return None
 
-            # 固定范围线性映射: [0, 3500] -> [0, 1]
-            # 3500 = 反射率 0.35，覆盖绝大多数地表场景
             rgb = np.clip(rgb / 3500.0, 0, 1)
             rgb = rgb.transpose(1, 2, 0)
 
-            # Resize if needed (LANCZOS for best quality)
             if rgb.shape[0] != out_size or rgb.shape[1] != out_size:
                 pil = Image.fromarray((rgb * 255).astype(np.uint8))
                 pil = pil.resize((out_size, out_size), Image.Resampling.LANCZOS)

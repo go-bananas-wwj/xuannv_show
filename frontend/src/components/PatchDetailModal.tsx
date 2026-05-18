@@ -184,6 +184,22 @@ function LegendBar({ headId }: { headId: string }) {
 
   return (
     <div className="flex items-center justify-center gap-2 text-xs text-slate-500 flex-wrap">
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+        <div className="w-3 h-3 rounded bg-slate-300" />
+        <span>S2 前期</span>
+      </div>
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+        <div className="w-3 h-3 rounded bg-purple-200" />
+        <span>SAR 前期</span>
+      </div>
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+        <div className="w-3 h-3 rounded bg-purple-400" />
+        <span>SAR 后期</span>
+      </div>
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+        <div className="w-3 h-3 rounded bg-slate-400" />
+        <span>S2 后期</span>
+      </div>
       {legend.map((item) => (
         <div
           key={item.label}

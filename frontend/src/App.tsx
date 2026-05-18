@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { useRef, useEffect, useState, createContext, useContext } from 'react'
+import { useRef, useEffect, useState, createContext, useContext, lazy, Suspense } from 'react'
 import { motion } from 'framer-motion'
 import Navigation from '@/components/Navigation'
 import HeroSection from '@/sections/HeroSection'
@@ -13,6 +13,7 @@ import AnnotatePage from '@/pages/AnnotatePage'
 import LoginPage from '@/pages/LoginPage'
 import ModelHubPage from '@/pages/ModelHubPage'
 import ModelApplyPage from '@/pages/ModelApplyPage'
+const AboutPage = lazy(() => import('@/pages/AboutPage'))
 import AuthGuard from '@/components/AuthGuard'
 import { useAuthStore } from '@/stores/authStore'
 import { getMe } from '@/utils/api'
@@ -104,7 +105,7 @@ function HomePage() {
           viewport={{ once: true, margin: '-100px' }}
           transition={{ duration: 0.8 }}
         >
-          <AboutSection />
+          <AboutSection onExploreData={() => scrollTo(dataRef)} />
         </motion.div>
 
         <motion.div
@@ -194,6 +195,14 @@ function AppRoutes() {
       <Route path="/annotate" element={<AuthGuard><AnnotatePage /></AuthGuard>} />
       <Route path="/models" element={<AuthGuard><ModelHubPage /></AuthGuard>} />
       <Route path="/apply" element={<AuthGuard><ModelApplyPage /></AuthGuard>} />
+      <Route
+        path="/about"
+        element={
+          <Suspense fallback={<div className="h-dvh bg-[#0a0a0f] flex items-center justify-center text-white">加载中...</div>}>
+            <AboutPage />
+          </Suspense>
+        }
+      />
       <Route path="*" element={<HomePage />} />
     </Routes>
   )

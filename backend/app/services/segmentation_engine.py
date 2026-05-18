@@ -191,40 +191,8 @@ class SegmentationEngine:
 
     def _load_s2_rgb_natural(self, patch_id: str, month: str, out_size: int = 256) -> np.ndarray | None:
         """加载 S2 RGB 原始影像，固定反射率范围归一化."""
-        from demo_v2.utils.constants import TIME_WINDOWS, RAW_DIR as DEMO_RAW_DIR
-        from demo_v2.engines.patch_image_loader import _find_best_tif
-
-        window = TIME_WINDOWS.get(month)
-        if window is None:
-            return None
-
-        source_dir = DEMO_RAW_DIR / "s2" / patch_id
-        tif_path = _find_best_tif(source_dir, window[0], window[1])
-        if tif_path is None:
-            return None
-
-        try:
-            with rasterio.open(str(tif_path)) as ds:
-                data = ds.read()
-
-            if data.shape[0] >= 4:
-                rgb = data[[2, 1, 0]].astype(np.float32)
-            elif data.shape[0] >= 3:
-                rgb = data[:3].astype(np.float32)
-            else:
-                return None
-
-            rgb = np.clip(rgb / 3500.0, 0, 1)
-            rgb = rgb.transpose(1, 2, 0)
-
-            if rgb.shape[0] != out_size or rgb.shape[1] != out_size:
-                pil = Image.fromarray((rgb * 255).astype(np.uint8))
-                pil = pil.resize((out_size, out_size), Image.Resampling.LANCZOS)
-                rgb = np.array(pil).astype(np.float32) / 255.0
-
-            return rgb
-        except Exception:
-            return None
+        from app.services.patch_image_loader import load_s2_rgb_natural
+        return load_s2_rgb_natural(patch_id, month, out_size)
 
     def _load_ground_truth(
         self,
