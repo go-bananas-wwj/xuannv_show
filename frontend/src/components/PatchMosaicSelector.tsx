@@ -50,6 +50,14 @@ export default function PatchMosaicSelector({
   // Auto-center on mount / patches change / mosaicUrl change
   useEffect(() => {
     setIsImageLoading(true)
+    // 手动预加载：如果图片已在浏览器缓存中，立即标记为加载完成
+    const preload = new Image()
+    preload.onload = () => setIsImageLoading(false)
+    preload.onerror = () => setIsImageLoading(false)
+    preload.src = mosaicUrl
+    if (preload.complete) {
+      setIsImageLoading(false)
+    }
     if (patches.length > 0 && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect()
       const fitScale = Math.min(rect.width / grid.mosaicW, rect.height / grid.mosaicH) * 0.95
@@ -59,6 +67,10 @@ export default function PatchMosaicSelector({
         x: (rect.width - grid.mosaicW * initialScale) / 2,
         y: (rect.height - grid.mosaicH * initialScale) / 2,
       })
+    }
+    return () => {
+      preload.onload = null
+      preload.onerror = null
     }
   }, [patches.length, grid.mosaicW, grid.mosaicH, mosaicUrl])
 
@@ -167,6 +179,7 @@ export default function PatchMosaicSelector({
       >
         {/* Background mosaic image */}
         <img
+          key={mosaicUrl}
           src={mosaicUrl}
           alt="patch mosaic"
           className="block"
