@@ -48,12 +48,10 @@ export default function MosaicViewer({
   useEffect(() => {
     if (patches.length === 0) return
     const timer = setTimeout(() => {
-      if (loadedCount < patches.length) {
-        setForceReady(true)
-      }
+      setForceReady(true)
     }, 10000)
     return () => clearTimeout(timer)
-  }, [headId, period, patches.length, loadedCount])
+  }, [headId, period, patches.length])
 
   // 计算网格边界
   const grid = useMemo(() => {

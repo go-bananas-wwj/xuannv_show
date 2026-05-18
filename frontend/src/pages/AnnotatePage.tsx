@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowLeftCircle, ZoomIn, ZoomOut, Maximize, Trash2, Save, Play, Loader2, Plus, X, Hand, MousePointer2, GraduationCap, Pencil, GitCompare } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -96,6 +96,9 @@ export default function AnnotatePage() {
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null)
   const [savedMaskImages, setSavedMaskImages] = useState<Record<string, HTMLCanvasElement>>({})
   const navigate = useNavigate()
+  const trainIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const cdTrainIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const samRequestIdRef = useRef(0)
   const [drawingPoints, setDrawingPoints] = useState<Array<{x: number, y: number}>>([])
   const [mousePos, setMousePos] = useState<{x: number, y: number} | null>(null)
   const [finishedGeometry, setFinishedGeometry] = useState<{type: 'polygon' | 'polyline', points: Array<{x: number, y: number}>} | null>(null)
@@ -129,20 +132,30 @@ export default function AnnotatePage() {
       alert('请先创建并选择一个类别')
       return
     }
+    if (cdTrainIntervalRef.current) {
+      clearInterval(cdTrainIntervalRef.current)
+      cdTrainIntervalRef.current = null
+    }
     setIsTrainingCD(true)
     try {
       const { createCDModel, trainCDModel, getCDTrainingStatus } = await import('@/utils/api')
       const { model_id } = await createCDModel(`变化检测_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '')}`)
       const { job_id } = await trainCDModel(model_id)
-      const interval = setInterval(async () => {
+      cdTrainIntervalRef.current = setInterval(async () => {
         try {
           const status = await getCDTrainingStatus(job_id)
           if (status.status === 'completed' || status.status === 'failed') {
-            clearInterval(interval)
+            if (cdTrainIntervalRef.current) {
+              clearInterval(cdTrainIntervalRef.current)
+              cdTrainIntervalRef.current = null
+            }
             fetchCDModels()
           }
         } catch (err) {
-          clearInterval(interval)
+          if (cdTrainIntervalRef.current) {
+            clearInterval(cdTrainIntervalRef.current)
+            cdTrainIntervalRef.current = null
+          }
         }
       }, 2000)
     } catch (err) {
@@ -182,6 +195,16 @@ export default function AnnotatePage() {
     fetchPatches().then(setPatches).catch(console.error)
     fetchClasses().then(store.setClasses).catch(console.error)
     fetchAnnotations().then(store.setAnnotations).catch(console.error)
+    return () => {
+      if (trainIntervalRef.current) {
+        clearInterval(trainIntervalRef.current)
+        trainIntervalRef.current = null
+      }
+      if (cdTrainIntervalRef.current) {
+        clearInterval(cdTrainIntervalRef.current)
+        cdTrainIntervalRef.current = null
+      }
+    }
   }, [])
 
   // ── Auto-start tour for new users when entering annotate view ──
@@ -220,6 +243,8 @@ export default function AnnotatePage() {
       setDrawingPoints([])
       setFinishedGeometry(null)
       setMousePos(null)
+      setSavedMaskImages({})
+      setSelectedAnnotationId(null)
       return
     }
     const patch = store.selectedPatch
@@ -248,45 +273,70 @@ export default function AnnotatePage() {
   useEffect(() => {
     if (!imageUrl) { setImageObj(null); setIsImageLoading(false); return }
     setIsImageLoading(true)
+    let cancelled = false
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
+      if (cancelled) return
       setImageObj(img)
       setIsImageLoading(false)
     }
-    img.onerror = () => setIsImageLoading(false)
+    img.onerror = () => {
+      if (cancelled) return
+      setIsImageLoading(false)
+    }
     img.src = imageUrl
+    return () => { cancelled = true }
   }, [imageUrl])
 
   // ── Load Before image object (change detection mode) ──
   useEffect(() => {
     if (!beforeImageUrl) { setBeforeImageObj(null); return }
+    let cancelled = false
     const img = new Image()
     img.crossOrigin = 'anonymous'
-    img.onload = () => setBeforeImageObj(img)
+    img.onload = () => {
+      if (!cancelled) setBeforeImageObj(img)
+    }
+    img.onerror = () => {}
     img.src = beforeImageUrl
+    return () => { cancelled = true }
   }, [beforeImageUrl])
 
   // ── Load mask objects ──
   useEffect(() => {
     if (store.maskCandidates.length === 0) { setMaskObjs([]); setTintedMaskObjs([]); return }
-    const objs: HTMLImageElement[] = new Array(store.maskCandidates.length)
+    let cancelled = false
+    const targetCount = store.maskCandidates.length
+    const objs: HTMLImageElement[] = new Array(targetCount)
     let loaded = 0
+    let errored = 0
     store.maskCandidates.forEach((m, i) => {
       const img = new Image()
       img.onload = () => {
+        if (cancelled) return
         objs[i] = img
         loaded++
-        if (loaded === store.maskCandidates.length) {
+        if (loaded + errored === targetCount) {
           setMaskObjs([...objs])
-          // Tint all masks with active class color
           const activeClass = store.classes.find(c => c.id === store.activeClassId)
           const tintColor = activeClass?.color || '#00ffff'
-          setTintedMaskObjs(objs.map(raw => tintMask(raw, tintColor)))
+          setTintedMaskObjs(objs.map(raw => raw ? tintMask(raw, tintColor) : document.createElement('canvas')))
+        }
+      }
+      img.onerror = () => {
+        if (cancelled) return
+        errored++
+        if (loaded + errored === targetCount) {
+          setMaskObjs([...objs])
+          const activeClass = store.classes.find(c => c.id === store.activeClassId)
+          const tintColor = activeClass?.color || '#00ffff'
+          setTintedMaskObjs(objs.map(raw => raw ? tintMask(raw, tintColor) : document.createElement('canvas')))
         }
       }
       img.src = `data:image/png;base64,${m.mask_b64}`
     })
+    return () => { cancelled = true }
   }, [store.maskCandidates])
 
   // ── Re-tint masks when active class changes ──
@@ -303,12 +353,14 @@ export default function AnnotatePage() {
     const toLoad = maskAnns.filter(a => !savedMaskImages[a.id])
     if (toLoad.length === 0) return
 
+    let cancelled = false
     const newImages: Record<string, HTMLCanvasElement> = {}
     let loaded = 0
     toLoad.forEach(ann => {
       const cls = store.classes.find(c => c.id === ann.class_id)
       const img = new Image()
       img.onload = () => {
+        if (cancelled) return
         newImages[ann.id] = tintMask(img, cls?.color || '#00ffff')
         loaded++
         if (loaded === toLoad.length) {
@@ -316,6 +368,7 @@ export default function AnnotatePage() {
         }
       }
       img.onerror = () => {
+        if (cancelled) return
         loaded++
         if (loaded === toLoad.length) {
           setSavedMaskImages(prev => ({ ...prev, ...newImages }))
@@ -323,6 +376,7 @@ export default function AnnotatePage() {
       }
       img.src = `data:image/png;base64,${(ann.geometry as { mask_b64: string }).mask_b64}`
     })
+    return () => { cancelled = true }
   }, [store.annotations, store.classes, tintMask])
 
   // ── Shared canvas render function ──
@@ -563,16 +617,16 @@ export default function AnnotatePage() {
     } else {
       renderCanvas(canvasRef.current, imageObj, store.selectedMonth)
     }
-  }, [imageObj, beforeImageObj, store.annotationMode, renderCanvas])
+  }, [imageObj, beforeImageObj, store.annotationMode, store.selectedMonth, store.selectedBeforeMonth, store.selectedAfterMonth, renderCanvas])
 
   // ── Native wheel listener (non-passive) ──
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = store.annotationMode === 'change_detection'
       ? parentContainerRef.current
       : canvasContainerRef.current
     if (!container) return
 
-    const handleWheel = (e: WheelEvent) => {
+    const handleWheelNative = (e: WheelEvent) => {
       e.preventDefault()
 
       const rect = container.getBoundingClientRect()
@@ -591,9 +645,9 @@ export default function AnnotatePage() {
       setScale(newScale)
     }
 
-    container.addEventListener('wheel', handleWheel, { passive: false })
-    return () => container.removeEventListener('wheel', handleWheel)
-  }, [imageUrl, store.annotationMode])
+    container.addEventListener('wheel', handleWheelNative, { passive: false })
+    return () => container.removeEventListener('wheel', handleWheelNative)
+  }, [store.annotationMode])
 
   // ── Coordinate mapping ──
   const screenToImage = useCallback((clientX: number, clientY: number) => {
@@ -615,13 +669,14 @@ export default function AnnotatePage() {
     } else {
       canvas = canvasRef.current
     }
-    if (!canvas || !imageObj) return null
+    const activeImg = canvas === leftCanvasRef.current ? beforeImageObj : imageObj
+    if (!activeImg) return null
     const rect = canvas.getBoundingClientRect()
     const cx = clientX - rect.left
     const cy = clientY - rect.top
 
-    const imgW = imageObj.naturalWidth || 512
-    const imgH = imageObj.naturalHeight || 512
+    const imgW = activeImg.naturalWidth || 512
+    const imgH = activeImg.naturalHeight || 512
     const centerX = rect.width / 2
     const centerY = rect.height / 2
     const drawX = centerX + offset.x - (imgW * scale) / 2
@@ -660,6 +715,7 @@ export default function AnnotatePage() {
       if (!store.selectedPatch || !samEnabled || !store.isEmbeddingReady) return
       const isNegative = e.shiftKey || false  // right-click handled by onContextMenu preventDefault
       const newPoint: PromptPoint = { x: pos.x, y: pos.y, label: isNegative ? 0 : 1 }
+      const requestId = ++samRequestIdRef.current
       setPoints(prev => {
         const next = [...prev, newPoint]
         const month = store.annotationMode === 'change_detection' ? store.selectedAfterMonth : store.selectedMonth
@@ -671,14 +727,18 @@ export default function AnnotatePage() {
           next.map(p => p.label),
           true
         ).then(result => {
+          if (requestId !== samRequestIdRef.current) return
           store.setMaskCandidates(result.masks_b64.map((b64, i) => ({
             mask_b64: b64,
             score: result.scores[i],
           })))
         }).catch(err => {
+          if (requestId !== samRequestIdRef.current) return
           console.error('SAM segmentation failed:', err)
         }).finally(() => {
-          store.setIsLoadingMask(false)
+          if (requestId === samRequestIdRef.current) {
+            store.setIsLoadingMask(false)
+          }
         })
         return next
       })
@@ -774,7 +834,7 @@ export default function AnnotatePage() {
     } catch (err) {
       console.error('Failed to save annotation:', err)
     }
-  }, [store.selectedPatch, store.selectedMonth, store.activeClassId, store.maskCandidates, store.selectedMaskIndex, finishedGeometry])
+  }, [store.selectedPatch, store.selectedMonth, store.selectedBeforeMonth, store.selectedAfterMonth, store.activeClassId, store.maskCandidates, store.selectedMaskIndex, finishedGeometry])
 
   const handleDeleteAnnotation = async (id: string) => {
     try {
@@ -804,6 +864,10 @@ export default function AnnotatePage() {
 
   const handleConfirmTrain = async () => {
     if (!trainModelName.trim()) return
+    if (trainIntervalRef.current) {
+      clearInterval(trainIntervalRef.current)
+      trainIntervalRef.current = null
+    }
     setIsTraining(true)
     setShowTrainDialog(false)
     try {
@@ -811,19 +875,25 @@ export default function AnnotatePage() {
       const { job_id } = await createModel(trainModelName.trim())
       store.setTrainingJob({ job_id, status: 'running' })
       // Poll status
-      const interval = setInterval(async () => {
+      trainIntervalRef.current = setInterval(async () => {
         try {
           const { getTrainingStatus } = await import('@/utils/api')
           const status = await getTrainingStatus(job_id)
           store.setTrainingJob(status)
           if (status.status === 'completed' || status.status === 'failed') {
-            clearInterval(interval)
+            if (trainIntervalRef.current) {
+              clearInterval(trainIntervalRef.current)
+              trainIntervalRef.current = null
+            }
             if (status.status === 'completed' && status.model_path) {
               store.setTrainedModelPath(status.model_path)
             }
           }
         } catch (err) {
-          clearInterval(interval)
+          if (trainIntervalRef.current) {
+            clearInterval(trainIntervalRef.current)
+            trainIntervalRef.current = null
+          }
         }
       }, 2000)
       // Navigate to model hub after a short delay
@@ -872,6 +942,7 @@ export default function AnnotatePage() {
           store.setMaskCandidates([])
           setPoints([])
           setFinishedGeometry(null)
+          store.setIsLoadingMask(false)
         }
       }
       if (e.key === 'e' || e.key === 'E') {
@@ -1415,13 +1486,14 @@ export default function AnnotatePage() {
                 <button
                   onClick={async () => {
                     if (!store.selectedPatch) return
+                    const targetPatchId = store.selectedPatch.patch_id
+                    const targetMonth = store.annotationMode === 'change_detection' ? store.selectedAfterMonth : store.selectedMonth
                     setSamLoading(true)
                     setSamError(null)
                     try {
-                      await preloadSAM3Embedding(
-                        store.selectedPatch.patch_id,
-                        store.annotationMode === 'change_detection' ? store.selectedAfterMonth : store.selectedMonth
-                      )
+                      await preloadSAM3Embedding(targetPatchId, targetMonth)
+                      // Ignore if user switched patch while loading
+                      if (store.selectedPatch?.patch_id !== targetPatchId) return
                       store.setIsEmbeddingReady(true)
                       setSamEnabled(true)
                       setDrawMode('sam')

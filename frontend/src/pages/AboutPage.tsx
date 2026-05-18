@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import AboutHero from '@/sections/about/AboutHero'
 import AboutProblem from '@/sections/about/AboutProblem'
@@ -22,13 +23,13 @@ export default function AboutPage() {
     <div className="bg-[#0a0a0f] text-white overflow-x-hidden">
       {/* Back to home nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex items-center justify-between bg-[#0a0a0f]/80 backdrop-blur-md border-b border-white/5">
-        <a
-          href="/"
+        <Link
+          to="/"
           className="inline-flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>返回首页</span>
-        </a>
+        </Link>
         <div className="text-sm font-medium text-slate-400">玄女底座</div>
       </nav>
 

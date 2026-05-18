@@ -42,6 +42,7 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
   const [isEnlarged, setIsEnlarged] = useState(false)
   const [showEmbedding, setShowEmbedding] = useState(false)
   const matrixUrlRef = useRef<string | null>(null)
+  const currentPatchIdRef = useRef<string | null>(null)
 
   // Fetch Time×Source Matrix when patch changes
   useEffect(() => {
@@ -53,40 +54,47 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
       setMatrixUrl(null)
       setMatrixError(false)
       setImgLoaded(false)
+      setIsEnlarged(false)
       return
     }
 
+    const patchId = patch.patch_id
+    currentPatchIdRef.current = patchId
     setMatrixLoading(true)
     setMatrixError(false)
     setImgLoaded(false)
 
-    // 优先尝试静态文件，不存在时 fallback 到 API
-    const staticUrl = `/data/matrix/${patch.patch_id}.png`
-    const apiUrl = `/api/patches/${patch.patch_id}/matrix`
+    const controller = new AbortController()
+    const staticUrl = `/data/matrix/${patchId}.png`
+    const apiUrl = `/api/patches/${patchId}/matrix`
 
     const tryLoad = (url: string) => {
-      fetch(url)
+      fetch(url, { signal: controller.signal })
         .then((res) => {
           if (!res.ok) throw new Error(`Matrix not available: ${res.status}`)
           return res.blob()
         })
         .then((blob) => {
-          const url = URL.createObjectURL(blob)
+          // Ignore if patch has changed while loading
+          if (currentPatchIdRef.current !== patchId) return
+          const objectUrl = URL.createObjectURL(blob)
           if (matrixUrlRef.current) {
             URL.revokeObjectURL(matrixUrlRef.current)
           }
-          matrixUrlRef.current = url
-          setMatrixUrl(url)
+          matrixUrlRef.current = objectUrl
+          setMatrixUrl(objectUrl)
           setMatrixLoading(false)
         })
         .catch((err) => {
+          if (err.name === 'AbortError') return
           if (url === staticUrl) {
-            // 静态文件不存在，fallback 到 API
             tryLoad(apiUrl)
           } else {
             console.error('Matrix fetch failed:', err)
-            setMatrixError(true)
-            setMatrixLoading(false)
+            if (currentPatchIdRef.current === patchId) {
+              setMatrixError(true)
+              setMatrixLoading(false)
+            }
           }
         })
     }
@@ -94,12 +102,19 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
     tryLoad(staticUrl)
 
     return () => {
+      controller.abort()
+    }
+  }, [patch?.patch_id])
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
       if (matrixUrlRef.current) {
         URL.revokeObjectURL(matrixUrlRef.current)
         matrixUrlRef.current = null
       }
     }
-  }, [patch?.patch_id])
+  }, [])
 
   // Reset embedding panel when patch changes
   useEffect(() => {

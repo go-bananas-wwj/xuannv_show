@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Calendar, MapPin, BarChart3 } from 'lucide-react'
 import config from '@/config.json'
@@ -21,6 +21,7 @@ export default function PatchDetailModal({
   const [detailUrl, setDetailUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const detailUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isOpen || !patchId) {
@@ -33,26 +34,43 @@ export default function PatchDetailModal({
     setError(null)
     setDetailUrl(null)
 
+    const controller = new AbortController()
     const url = `/api/heads/${headId}/patch/${patchId}/detail?period=${encodeURIComponent(period)}`
 
-    fetch(url)
+    fetch(url, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return res.blob()
       })
       .then((blob) => {
-        setDetailUrl(URL.createObjectURL(blob))
+        const objectUrl = URL.createObjectURL(blob)
+        if (detailUrlRef.current) {
+          URL.revokeObjectURL(detailUrlRef.current)
+        }
+        detailUrlRef.current = objectUrl
+        setDetailUrl(objectUrl)
         setLoading(false)
       })
       .catch((err) => {
+        if (err.name === 'AbortError') return
         setError(err.message || '加载失败')
         setLoading(false)
       })
 
     return () => {
-      if (detailUrl) URL.revokeObjectURL(detailUrl)
+      controller.abort()
     }
   }, [isOpen, patchId, headId, period])
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (detailUrlRef.current) {
+        URL.revokeObjectURL(detailUrlRef.current)
+        detailUrlRef.current = null
+      }
+    }
+  }, [])
 
   // ESC 关闭
   useEffect(() => {

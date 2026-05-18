@@ -195,9 +195,7 @@ export async function importSHP(patchId: string, month: string, classId: string,
   form.append('month', month)
   form.append('class_id', classId)
   form.append('file', file)
-  const { data } = await api.post('/annotate/annotations/import_shp', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  const { data } = await api.post('/annotate/annotations/import_shp', form)
   return data
 }
 
