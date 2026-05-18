@@ -50,3 +50,14 @@ data/harbin/predictions_v2/
 data/harbin/results/
 data/harbin/results_v2/
 
+# Internal docs (keep locally, do not upload to GitHub)
+/AGENTS.md
+/改进计划_*.md
+/需求文档_*.md
+docs/EMBEDDING_RESEARCH_REPORT.md
+docs/GT_PREPROCESS_BUGS.md
+docs/ISSUE_ANALYSIS_AND_PLAN.md
+docs/语义预设汇报指南.md
+docs/领导问题回答指南.md
+tests/TEST_REPORT.md
+
