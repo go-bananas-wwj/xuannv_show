@@ -83,8 +83,19 @@ class TimingMiddleware(BaseHTTPMiddleware):
 
 # 路径（从配置读取，支持环境变量覆盖）
 FRONTEND_DIST = settings.project_root / "frontend" / "dist"
-STATIC_DATA_DIR = settings.project_root / "static_assets" / "data"
-STATIC_VIDEOS_DIR = settings.project_root / "static_assets" / "videos"
+# 静态资源支持版本化子目录：static_assets/{version}/{region}/
+STATIC_BASE = settings.static_assets_base
+STATIC_DATA_DIR = STATIC_BASE / "data"
+STATIC_VIDEOS_DIR = STATIC_BASE / "videos"
+
+# Fallback：如果版本化目录不存在，回退到 legacy static_assets/data/
+if settings.static_assets_version and not STATIC_DATA_DIR.exists():
+    LEGACY_DATA_DIR = settings.project_root / "static_assets" / "data"
+    LEGACY_VIDEOS_DIR = settings.project_root / "static_assets" / "videos"
+    if LEGACY_DATA_DIR.exists():
+        STATIC_DATA_DIR = LEGACY_DATA_DIR
+    if LEGACY_VIDEOS_DIR.exists():
+        STATIC_VIDEOS_DIR = LEGACY_VIDEOS_DIR
 
 import asyncio
 

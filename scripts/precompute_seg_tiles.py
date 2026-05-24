@@ -11,16 +11,17 @@ from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
-OUTPUT_DIR = Path("/workspace/xuannv_show/frontend/public/data/seg_tiles")
+from _paths import add_backend_to_path, ensure_env_raw_scenes, get_raw_scenes_dir, static_assets_dir
+
+OUTPUT_DIR = static_assets_dir() / "data" / "seg_tiles"
 
 HEAD_IDS = ["worldcover", "dynamic_world", "jrc_water", "building_extraction"]
 MONTHS = ["2025-04", "2025-06", "2025-08", "2025-09", "2025-10"]
 
 
 def init_worker():
-    sys.path.insert(0, "/workspace/xuannv_show/backend")
-    sys.path.insert(0, "/workspace/xuannv")
-    os.environ.setdefault("RAW_SCENES_DIR", "/workspace/raw/harbin_scenes")
+    add_backend_to_path()
+    ensure_env_raw_scenes()
 
 
 def render_one(head_id: str, month: str, patch_id: str) -> tuple[str, str, str, float, int]:
@@ -38,7 +39,7 @@ def render_one(head_id: str, month: str, patch_id: str) -> tuple[str, str, str, 
 
 
 def main():
-    raw_dir = Path("/workspace/raw/harbin_scenes/s2")
+    raw_dir = get_raw_scenes_dir() / "s2"
     patch_ids = sorted([d.name for d in raw_dir.iterdir() if d.is_dir() and d.name.startswith("patch_")])
     total = len(patch_ids)
     print(f"Patches: {total}, Tasks: {len(HEAD_IDS)}, Months: {len(MONTHS)}")

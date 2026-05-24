@@ -8,18 +8,20 @@ import warnings
 from pathlib import Path
 
 warnings.filterwarnings("ignore")
-sys.path.insert(0, "/workspace/xuannv_show/backend")
-sys.path.insert(0, "/workspace/xuannv")
-os.environ.setdefault("RAW_SCENES_DIR", "/workspace/raw/harbin_scenes")
+
+from _paths import add_backend_to_path, ensure_env_raw_scenes, static_assets_dir
+
+add_backend_to_path()
+ensure_env_raw_scenes()
 
 from app.routers.patches import _build_mosaic_image
 
-OUTPUT_DIR = Path("/workspace/xuannv_show/frontend/public/data/mosaic")
+OUTPUT_DIR = static_assets_dir() / "data" / "mosaic"
 
 SOURCES = ["s2", "s1", "landsat"]
 MONTHS = ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10"]
 TILE_SIZE = 128
-REGION = "harbin"
+REGION = os.environ.get("REGION", "harbin")
 
 
 def main():

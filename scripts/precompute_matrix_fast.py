@@ -11,14 +11,15 @@ from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
-OUTPUT_DIR = Path("/workspace/xuannv_show/frontend/public/data/matrix")
+from _paths import add_backend_to_path, ensure_env_raw_scenes, get_raw_scenes_dir, static_assets_dir
+
+OUTPUT_DIR = static_assets_dir() / "data" / "matrix"
 
 
 def init_worker():
     """每个子进程初始化时设置环境."""
-    sys.path.insert(0, "/workspace/xuannv_show/backend")
-    sys.path.insert(0, "/workspace/xuannv")
-    os.environ.setdefault("RAW_SCENES_DIR", "/workspace/raw/harbin_scenes")
+    add_backend_to_path()
+    ensure_env_raw_scenes()
 
 
 def render_one(patch_id: str) -> tuple[str, float, int]:
@@ -28,7 +29,7 @@ def render_one(patch_id: str) -> tuple[str, float, int]:
         png_bytes = render_time_source_matrix(patch_id)
         if png_bytes is None:
             return patch_id, 0.0, 0
-        out_path = OUTPUT_DIR / f"{patch_id}.png"
+        out_path = OUTPUT_DIR / f"{patch_id}.jpg"
         out_path.write_bytes(png_bytes)
         elapsed = time.time() - t0
         return patch_id, elapsed, len(png_bytes)
@@ -39,7 +40,7 @@ def render_one(patch_id: str) -> tuple[str, float, int]:
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    raw_dir = Path("/workspace/raw/harbin_scenes/s2")
+    raw_dir = get_raw_scenes_dir() / "s2"
     patch_ids = sorted([d.name for d in raw_dir.iterdir() if d.is_dir() and d.name.startswith("patch_")])
     total = len(patch_ids)
     print(f"Total patches to render: {total}")

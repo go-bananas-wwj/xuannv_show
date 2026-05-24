@@ -82,6 +82,16 @@ class Settings(BaseSettings):
     # ── 地区配置 ──
     region: str = Field(default="harbin", description="当前展示地区标识")
 
+    # ── 静态资源版本化 ──
+    static_assets_version: str | None = Field(
+        default=None,
+        description="静态资源版本号，如 v5.2.1；设置后 static_assets/{version}/{region}/ 生效",
+    )
+    static_assets_region: str | None = Field(
+        default=None,
+        description="静态资源地区子目录；默认继承 region",
+    )
+
     # ── 字体 ──
     font_path: Path = Field(
         default=Path("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"),
@@ -119,6 +129,16 @@ class Settings(BaseSettings):
     @property
     def patches_meta_path(self) -> Path:
         return self.project_root / "data" / self.region / "patches_meta.json"
+
+    @property
+    def static_assets_base(self) -> Path:
+        """静态资源根目录（支持版本化子目录）."""
+        base = self.project_root / "static_assets"
+        version = self.static_assets_version
+        region = self.static_assets_region or self.region
+        if version:
+            return base / version / region
+        return base
 
     @property
     def available_fonts(self) -> list[Path]:

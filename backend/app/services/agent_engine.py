@@ -25,7 +25,7 @@ from openai import AsyncOpenAI
 from app.config import settings
 
 # ── DeepSeek API 配置 ──
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or "sk-b37a3a569d1b4299853359e45e0d60ea"
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 
 # 快速解析模型（意图识别、参数提取）

@@ -374,7 +374,7 @@ async def get_patch_tile(
         return FileResponse(path, media_type="image/png")
     else:
         # 分类任务：优先使用预生成的静态 tile，不存在时动态生成
-        static_path = settings.project_root / "static_assets" / "data" / "seg_tiles" / head_id / period / f"{patch_id}.png"
+        static_path = settings.static_assets_base / "data" / "seg_tiles" / head_id / period / f"{patch_id}.png"
         if static_path.exists():
             return FileResponse(static_path, media_type="image/png")
         try:

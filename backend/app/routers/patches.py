@@ -153,7 +153,7 @@ async def list_patches(region: str = "harbin") -> list[dict[str, Any]]:
 
 
 # Mosaic 大图静态文件目录
-_MOSAIC_STATIC_DIR = settings.project_root / "static_assets" / "data" / "mosaic"
+_MOSAIC_STATIC_DIR = settings.static_assets_base / "data" / "mosaic"
 
 @router.get("/mosaic_image")
 async def get_mosaic_image(
@@ -207,7 +207,7 @@ async def get_patch(patch_id: str, region: str = "harbin") -> dict[str, Any]:
 
 
 # 静态矩阵图目录（优先返回预生成的静态文件）
-_MATRIX_STATIC_DIR = settings.project_root / "static_assets" / "data" / "matrix"
+_MATRIX_STATIC_DIR = settings.static_assets_base / "data" / "matrix"
 
 @router.get("/{patch_id}/matrix")
 async def get_patch_matrix(patch_id: str) -> Response:
@@ -220,9 +220,11 @@ async def get_patch_matrix(patch_id: str) -> Response:
         raise HTTPException(status_code=400, detail="Invalid patch_id format")
     
     # 优先返回预生成的静态文件
-    static_path = _MATRIX_STATIC_DIR / f"{patch_id}.png"
-    if static_path.exists():
-        return FileResponse(static_path, media_type="image/png")
+    for ext in (".jpg", ".jpeg", ".png"):
+        static_path = _MATRIX_STATIC_DIR / f"{patch_id}{ext}"
+        if static_path.exists():
+            media = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
+            return FileResponse(static_path, media_type=media)
     
     # 在线程池中执行 CPU 密集型渲染，避免阻塞事件循环
     png_bytes = await run_in_threadpool(render_time_source_matrix, patch_id)

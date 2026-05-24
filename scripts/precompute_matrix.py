@@ -10,14 +10,15 @@ from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
-# 将 backend 加入路径
-sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
-os.environ.setdefault("RAW_SCENES_DIR", "/workspace/raw/harbin_scenes")
+from _paths import add_backend_to_path, ensure_env_raw_scenes, get_raw_scenes_dir, static_assets_dir
+
+add_backend_to_path()
+ensure_env_raw_scenes()
 
 from app.services.matrix_renderer import render_time_source_matrix
 
 
-OUTPUT_DIR = Path(__file__).parent.parent / "frontend" / "public" / "data" / "matrix"
+OUTPUT_DIR = static_assets_dir() / "data" / "matrix"
 
 
 def render_one(patch_id: str) -> tuple[str, float, int]:
@@ -26,7 +27,7 @@ def render_one(patch_id: str) -> tuple[str, float, int]:
         png_bytes = render_time_source_matrix(patch_id)
         if png_bytes is None:
             return patch_id, 0.0, 0
-        out_path = OUTPUT_DIR / f"{patch_id}.png"
+        out_path = OUTPUT_DIR / f"{patch_id}.jpg"
         out_path.write_bytes(png_bytes)
         elapsed = __import__("time").time() - t0
         return patch_id, elapsed, len(png_bytes)
@@ -38,7 +39,7 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # 获取所有 patch_id
-    raw_dir = Path("/workspace/raw/harbin_scenes/s2")
+    raw_dir = get_raw_scenes_dir() / "s2"
     patch_ids = sorted([d.name for d in raw_dir.iterdir() if d.is_dir() and d.name.startswith("patch_")])
     total = len(patch_ids)
     print(f"Total patches to render: {total}")
