@@ -65,7 +65,7 @@ export default function PatchDetailPanel({ patch, onClose }: PatchDetailPanelPro
     setImgLoaded(false)
 
     const controller = new AbortController()
-    const staticUrl = `/data/matrix/${patchId}.png`
+    const staticUrl = `/data/matrix/${patchId}.jpg`
     const apiUrl = `/api/patches/${patchId}/matrix`
 
     const tryLoad = (url: string) => {

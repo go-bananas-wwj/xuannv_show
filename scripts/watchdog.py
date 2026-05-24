@@ -1,201 +1,206 @@
 #!/usr/bin/env python3
-"""前后端服务看门狗 — 自动检测并重启挂掉的服务."""
-from __future__ import annotations
+"""
+玄女底座展示平台 — 看门狗脚本
+实时监控前后端服务状态，自动重启挂掉的服务。
 
+用法:
+    # 前台运行（调试用）
+    python scripts/watchdog.py
+
+    # 后台常驻运行
+    nohup python scripts/watchdog.py > /tmp/xuannv_watchdog.log 2>&1 &
+"""
+
+import json
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.request import urlopen
+from urllib.error import URLError
 
 # ── 配置 ──
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-FRONTEND_DIR = PROJECT_ROOT / "frontend"
-BACKEND_DIR = PROJECT_ROOT / "backend"
+CHECK_INTERVAL = 30          # 检查间隔（秒）
+BACKEND_URL = "http://localhost:8000/health"
+FRONTEND_URL = "http://localhost:5173"
+BACKEND_LOG = "/tmp/xuannv_backend.log"
+FRONTEND_LOG = "/tmp/xuannv_frontend.log"
+WATCHDOG_LOG = "/tmp/xuannv_watchdog.log"
+
+# 环境
 CONDA_ENV = "xuannv"
-FRONTEND_PORT = 5173
-BACKEND_PORT = 8000
-FRONTEND_LOG = Path("/tmp/xuannv_watchdog_frontend.log")
-BACKEND_LOG = Path("/tmp/xuannv_watchdog_backend.log")
-WATCHDOG_LOG = Path("/tmp/xuannv_watchdog.log")
-CHECK_INTERVAL = 10  # 秒
-HEALTH_TIMEOUT = 5   # 秒
+CONDA_BIN = f"/opt/conda/envs/{CONDA_ENV}/bin"
+NODE_BIN = CONDA_BIN  # npm / node 也在 conda env 中
 
 
 def log(msg: str) -> None:
+    """带时间戳的日志输出。"""
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line, flush=True)
-    with open(WATCHDOG_LOG, "a") as f:
+    with open(WATCHDOG_LOG, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
 
-def is_process_running(cmd_keyword: str) -> bool:
-    """检查包含关键字的进程是否在运行."""
+def is_backend_alive() -> bool:
+    """检查后端 /health 接口。"""
     try:
-        result = subprocess.run(
-            ["pgrep", "-f", cmd_keyword],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        return result.returncode == 0 and bool(result.stdout.strip())
+        with urlopen(BACKEND_URL, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("status") == "ok"
     except Exception:
         return False
 
 
-def is_port_listening(port: int) -> bool:
-    """检查端口是否正在被监听."""
+def is_frontend_alive() -> bool:
+    """检查前端 dev server 端口。"""
     try:
-        import socket
-        with socket.create_connection(("127.0.0.1", port), timeout=HEALTH_TIMEOUT):
-            return True
-    except Exception:
-        return False
-
-
-def is_backend_healthy() -> bool:
-    """通过 HTTP 请求检查后端健康状态."""
-    try:
-        import urllib.request
-        with urllib.request.urlopen(
-            f"http://127.0.0.1:{BACKEND_PORT}/api/patches",
-            timeout=HEALTH_TIMEOUT,
-        ) as resp:
+        with urlopen(FRONTEND_URL, timeout=5) as resp:
             return resp.status == 200
     except Exception:
         return False
 
 
-def kill_processes(cmd_keyword: str) -> None:
-    """杀掉包含关键字的进程."""
+def find_pids(pattern: str) -> list[int]:
+    """根据命令行模式查找进程 PID。"""
     try:
-        subprocess.run(
-            ["pkill", "-9", "-f", cmd_keyword],
-            capture_output=True,
-            timeout=5,
-        )
-        time.sleep(1)
-    except Exception as e:
-        log(f"kill_processes({cmd_keyword}) warning: {e}")
-
-
-def kill_port_process(port: int) -> None:
-    """通过端口查找并杀掉占用进程（备选方案）."""
-    try:
-        # 尝试用 fuser 杀端口占用
-        subprocess.run(
-            ["fuser", "-k", f"{port}/tcp"],
-            capture_output=True,
-            timeout=5,
-        )
-        time.sleep(1)
-    except Exception:
-        pass
-    try:
-        # 备选：lsof + kill
-        result = subprocess.run(
-            ["lsof", "-t", f"-i:{port}"],
-            capture_output=True,
+        output = subprocess.check_output(
+            ["pgrep", "-f", pattern],
             text=True,
-            timeout=5,
+            stderr=subprocess.DEVNULL,
         )
-        if result.returncode == 0:
-            for pid in result.stdout.strip().splitlines():
-                if pid:
-                    subprocess.run(["kill", "-9", pid], capture_output=True, timeout=3)
-            time.sleep(1)
-    except Exception:
-        pass
+        return [int(p) for p in output.strip().split("\n") if p.strip()]
+    except subprocess.CalledProcessError:
+        return []
 
 
-def start_frontend() -> None:
-    """启动前端 Vite 开发服务器."""
-    log("[frontend] 启动中...")
-    kill_processes(r"node.*vite.*--host")
-    kill_processes(r"npm run dev.*--host")
-    cmd = (
-        f"cd {FRONTEND_DIR} && "
-        f"conda run -n {CONDA_ENV} nohup npm run dev -- --host 0.0.0.0 "
-        f"> {FRONTEND_LOG} 2>&1 &"
-    )
-    subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(3)
-    log("[frontend] 启动命令已下发")
+def kill_service(pattern: str, name: str) -> None:
+    """优雅地终止匹配进程。"""
+    pids = find_pids(pattern)
+    if not pids:
+        return
+    log(f"  {name}: 发现 {len(pids)} 个残留进程，正在终止...")
+    for pid in pids:
+        try:
+            os.kill(pid, 15)  # SIGTERM
+        except ProcessLookupError:
+            pass
+    time.sleep(2)
+    # 强制杀死还在的
+    for pid in find_pids(pattern):
+        try:
+            os.kill(pid, 9)  # SIGKILL
+        except ProcessLookupError:
+            pass
 
 
 def start_backend() -> None:
-    """启动后端 Uvicorn 服务.
-    
-    注意：不使用 --reload 模式，因为：
-    1. lifespan 中的 SAM3 预热需要 20~30s，--reload 的 multiprocessing 模式会导致
-       子进程在预热期间无法监听端口，看门狗误判为异常而反复重启
-    2. 生产/稳定运行环境不需要代码热重载
-    """
-    log("[backend] 启动中...")
-    kill_processes(r"uvicorn app\.main:app")
-    kill_port_process(BACKEND_PORT)
-    kill_processes(r"python.*multiprocessing.*spawn_main")
-    cmd = (
-        f"cd {BACKEND_DIR} && "
-        f"PYTHONPATH={BACKEND_DIR}:{BACKEND_DIR}/sam3 "
-        f"conda run -n {CONDA_ENV} nohup uvicorn app.main:app --host 0.0.0.0 --port {BACKEND_PORT} "
-        f"> {BACKEND_LOG} 2>&1 &"
-    )
-    subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # SAM3 预热需要 20~30s，给足时间
-    time.sleep(30)
-    log("[backend] 启动命令已下发（等待 SAM3 预热）")
+    """启动后端 uvicorn 服务。"""
+    backend_dir = PROJECT_ROOT / "backend"
+    env = os.environ.copy()
+    env["PATH"] = f"{CONDA_BIN}:{env.get('PATH', '')}"
 
-
-def check_and_recover() -> None:
-    """检查服务状态，如有异常则恢复."""
-    # ── 前端 ──
-    frontend_proc_ok = is_process_running(r"node.*vite.*--host")
-    frontend_port_ok = is_port_listening(FRONTEND_PORT)
-    if not frontend_proc_ok or not frontend_port_ok:
-        log(
-            f"[frontend] 异常检测: process={frontend_proc_ok}, port={frontend_port_ok} -> 重启"
+    log("  Backend: 正在启动 uvicorn...")
+    with open(BACKEND_LOG, "w", encoding="utf-8") as out:
+        subprocess.Popen(
+            [
+                f"{CONDA_BIN}/python3.11",
+                f"{CONDA_BIN}/uvicorn",
+                "app.main:app",
+                "--host", "0.0.0.0",
+                "--port", "8000",
+            ],
+            cwd=str(backend_dir),
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            env=env,
         )
-        start_frontend()
-    else:
-        log("[frontend] 正常")
+    # 等待启动完成（最长 120 秒）
+    for i in range(120):
+        time.sleep(1)
+        if is_backend_alive():
+            log("  Backend: 启动成功 ✓")
+            return
+    log("  Backend: 启动超时 ✗")
 
-    # ── 后端 ──
-    backend_proc_ok = is_process_running(r"uvicorn app\.main:app")
-    backend_port_ok = is_port_listening(BACKEND_PORT)
-    backend_http_ok = is_backend_healthy()
-    if not backend_proc_ok or not backend_port_ok or not backend_http_ok:
-        log(
-            f"[backend] 异常检测: process={backend_proc_ok}, port={backend_port_ok}, http={backend_http_ok} -> 重启"
+
+def start_frontend() -> None:
+    """启动前端 Vite dev server。"""
+    frontend_dir = PROJECT_ROOT / "frontend"
+    env = os.environ.copy()
+    env["PATH"] = f"{NODE_BIN}:{env.get('PATH', '')}"
+
+    log("  Frontend: 正在启动 vite dev server...")
+    with open(FRONTEND_LOG, "w", encoding="utf-8") as out:
+        subprocess.Popen(
+            ["npm", "run", "dev"],
+            cwd=str(frontend_dir),
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            env=env,
         )
-        start_backend()
-    else:
-        log("[backend] 正常")
+    # 等待启动完成（最长 30 秒）
+    for i in range(30):
+        time.sleep(1)
+        if is_frontend_alive():
+            log("  Frontend: 启动成功 ✓")
+            return
+    log("  Frontend: 启动超时 ✗")
 
 
 def main() -> None:
     log("=" * 50)
-    log("看门狗启动")
-    log(f"项目根目录: {PROJECT_ROOT}")
-    log(f"Conda 环境: {CONDA_ENV}")
-    log(f"检查间隔: {CHECK_INTERVAL}s")
+    log("玄女底座看门狗启动")
+    log(f"检查间隔: {CHECK_INTERVAL}s | 后端: {BACKEND_URL} | 前端: {FRONTEND_URL}")
     log("=" * 50)
 
-    # 首次启动时，如果服务不存在则启动
-    check_and_recover()
+    # 首次启动：如果服务不在运行，立即拉起
+    if not is_backend_alive():
+        log("【首次】后端未运行，立即启动...")
+        kill_service("uvicorn app.main:app", "Backend")
+        start_backend()
+    else:
+        log("【首次】后端运行正常 ✓")
 
+    if not is_frontend_alive():
+        log("【首次】前端未运行，立即启动...")
+        kill_service("vite", "Frontend")
+        start_frontend()
+    else:
+        log("【首次】前端运行正常 ✓")
+
+    # 主循环
     while True:
         time.sleep(CHECK_INTERVAL)
-        try:
-            check_and_recover()
-        except Exception as e:
-            log(f"[watchdog] 检查异常: {e}")
+
+        backend_ok = is_backend_alive()
+        frontend_ok = is_frontend_alive()
+
+        if backend_ok and frontend_ok:
+            # 每 10 次正常检查输出一次心跳，避免日志刷屏
+            continue
+
+        log("-" * 40)
+        if not backend_ok:
+            log("【告警】后端无响应，正在重启...")
+            kill_service("uvicorn app.main:app", "Backend")
+            start_backend()
+        else:
+            log("  Backend: 正常 ✓")
+
+        if not frontend_ok:
+            log("【告警】前端无响应，正在重启...")
+            kill_service("vite", "Frontend")
+            start_frontend()
+        else:
+            log("  Frontend: 正常 ✓")
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        log("看门狗收到 Ctrl+C，退出")
+        log("看门狗收到中断信号，退出。")
         sys.exit(0)

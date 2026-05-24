@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Globe, BarChart3, Layers, Grid3X3, Eye } from 'lucide-react'
 
 const months = [
-  { label: '4月', value: '04', path: '/data/embeddings/global/2025-04.png' },
-  { label: '6月', value: '06', path: '/data/embeddings/global/2025-06.png' },
-  { label: '8月', value: '08', path: '/data/embeddings/global/2025-08.png' },
-  { label: '10月', value: '10', path: '/data/embeddings/global/2025-10.png' },
+  { label: '4月', value: '04', path: '/data/embeddings/thumbnails/global/2025-04.jpg' },
+  { label: '6月', value: '06', path: '/data/embeddings/thumbnails/global/2025-06.jpg' },
+  { label: '8月', value: '08', path: '/data/embeddings/thumbnails/global/2025-08.jpg' },
+  { label: '10月', value: '10', path: '/data/embeddings/thumbnails/global/2025-10.jpg' },
 ]
 
 interface PresetData {
@@ -147,7 +147,7 @@ export default function AboutEmbedding() {
               ) : (
                 <motion.img
                   key={`semantic-${semanticPreset}`}
-                  src={`/data/embeddings/semantic/${semanticPreset}/2025-04.png`}
+                  src={`/data/embeddings/thumbnails/semantic/${semanticPreset}/2025-04.jpg`}
                   alt={`语义预设 ${semanticPreset}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}

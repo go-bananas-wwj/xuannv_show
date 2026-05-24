@@ -38,8 +38,8 @@ export default function GlobalEmbeddingModal({ isOpen, onClose }: GlobalEmbeddin
 
   const currentMonth = MONTHS[monthIndex]
   const imageUrl = viewMode === 'pca'
-    ? `/data/embeddings/global/${currentMonth}.png`
-    : `/data/embeddings/semantic/${activePreset}/${currentMonth}.png`
+    ? `/data/embeddings/thumbnails/global/${currentMonth}.jpg`
+    : `/data/embeddings/thumbnails/semantic/${activePreset}/${currentMonth}.jpg`
 
   // Load presets on mount
   useEffect(() => {

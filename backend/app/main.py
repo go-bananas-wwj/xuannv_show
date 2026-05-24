@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from app.config import settings
 
@@ -82,6 +83,8 @@ class TimingMiddleware(BaseHTTPMiddleware):
 
 # 路径（从配置读取，支持环境变量覆盖）
 FRONTEND_DIST = settings.project_root / "frontend" / "dist"
+STATIC_DATA_DIR = settings.project_root / "static_assets" / "data"
+STATIC_VIDEOS_DIR = settings.project_root / "static_assets" / "videos"
 
 import asyncio
 
@@ -117,6 +120,9 @@ app = FastAPI(
     openapi_url=None,   # 禁用 OpenAPI schema
     lifespan=lifespan,
 )
+
+# GZip 压缩（>=1KB 才压缩，放在 CORS 之前避免重复处理）
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # CORS — 从配置读取（支持环境变量 + .env 文件）
 _cors_origins = settings.cors_origins.split(",")
@@ -205,6 +211,12 @@ async def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# 静态文件托管（前端构建产物）
+# 静态文件托管 — 大数据目录（不随前端构建产物打包，单独 serve）
+if STATIC_DATA_DIR.exists():
+    app.mount("/data", StaticFiles(directory=STATIC_DATA_DIR), name="static_data")
+if STATIC_VIDEOS_DIR.exists():
+    app.mount("/videos", StaticFiles(directory=STATIC_VIDEOS_DIR), name="static_videos")
+
+# 静态文件托管（前端构建产物）— 放在最后，作为 fallback
 if FRONTEND_DIST.exists():
     app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="static")

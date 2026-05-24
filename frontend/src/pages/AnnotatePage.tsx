@@ -669,6 +669,7 @@ export default function AnnotatePage() {
     } else {
       canvas = canvasRef.current
     }
+    if (!canvas) return null
     const activeImg = canvas === leftCanvasRef.current ? beforeImageObj : imageObj
     if (!activeImg) return null
     const rect = canvas.getBoundingClientRect()
@@ -1065,7 +1066,7 @@ export default function AnnotatePage() {
               patches={patches}
               selectedPatchId={store.selectedPatch?.patch_id || null}
               onSelectPatch={(p) => store.setSelectedPatch(p)}
-              mosaicUrl={`/data/mosaic/${dataSource}/${store.selectedMonth}_128.jpg`}
+              mosaicUrl={`/data/mosaic/thumbnails/${dataSource}/${store.selectedMonth}_128.jpg`}
             />
           </div>
         </div>

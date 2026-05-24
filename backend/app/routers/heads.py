@@ -339,6 +339,7 @@ def _render_custom_detail_cached(head_id: str, patch_id: str, period: str) -> by
 
 
 @router.get("/{head_id}/patch/{patch_id}/tile", response_model=None)
+@router.head("/{head_id}/patch/{patch_id}/tile", response_model=None, include_in_schema=False)
 async def get_patch_tile(
     head_id: str,
     patch_id: str,
@@ -373,7 +374,7 @@ async def get_patch_tile(
         return FileResponse(path, media_type="image/png")
     else:
         # 分类任务：优先使用预生成的静态 tile，不存在时动态生成
-        static_path = settings.project_root / "frontend" / "public" / "data" / "seg_tiles" / head_id / period / f"{patch_id}.png"
+        static_path = settings.project_root / "static_assets" / "data" / "seg_tiles" / head_id / period / f"{patch_id}.png"
         if static_path.exists():
             return FileResponse(static_path, media_type="image/png")
         try:

@@ -153,7 +153,7 @@ async def list_patches(region: str = "harbin") -> list[dict[str, Any]]:
 
 
 # Mosaic 大图静态文件目录
-_MOSAIC_STATIC_DIR = settings.project_root / "frontend" / "public" / "data" / "mosaic"
+_MOSAIC_STATIC_DIR = settings.project_root / "static_assets" / "data" / "mosaic"
 
 @router.get("/mosaic_image")
 async def get_mosaic_image(
@@ -207,7 +207,7 @@ async def get_patch(patch_id: str, region: str = "harbin") -> dict[str, Any]:
 
 
 # 静态矩阵图目录（优先返回预生成的静态文件）
-_MATRIX_STATIC_DIR = settings.project_root / "frontend" / "public" / "data" / "matrix"
+_MATRIX_STATIC_DIR = settings.project_root / "static_assets" / "data" / "matrix"
 
 @router.get("/{patch_id}/matrix")
 async def get_patch_matrix(patch_id: str) -> Response:
